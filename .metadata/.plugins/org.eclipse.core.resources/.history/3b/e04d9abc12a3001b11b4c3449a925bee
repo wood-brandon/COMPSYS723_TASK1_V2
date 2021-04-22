@@ -1,0 +1,296 @@
+// Standard includes
+#include <stddef.h>
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <stdbool.h>
+
+// Scheduler includes
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/queue.h"
+#include "freertos/semphr.h"
+#include "freertos/timers.h"
+#include "alt_types.h"
+#include "sys/alt_irq.h"
+
+#include <altera_avalon_pio_regs.h>
+#include <altera_avalon_timer.h>
+#include "io.h"
+
+// Definition of Task Stacks
+#define   TASK_STACKSIZE       2048
+//freqarray size could be moved to global.h file???
+#define FREQ_ARRAY_SIZE 50
+
+// Definition of Task Priorities
+#define VGA_PRIORITY 			1
+#define STABILITY_PRIORITY      6
+#define LOAD_PRIORITY      		4
+#define MANAGE_PRIORITY    		5
+#define SWITCH_PRIORITY    		1
+#define DEBUG_PRIORITY       	0
+
+// Definition of Message Queue
+#define   	MSG_QUEUE_SIZE  30
+#define   	NUM_LOADS 5
+<<<<<<< Updated upstream
+QueueHandle_t LoadQueue;
+xQueueHandle frequencyQ;
+=======
+QueueHandle_t loadQ;
+>>>>>>> Stashed changes
+
+// used to delete a task
+TaskHandle_t xHandle;
+
+// Definition of Semaphore
+xSemaphoreHandle sys_status_flag;
+xSemaphoreHandle management_flag;
+SemaphoreHandle_t shared_resource_sem;
+
+
+// globals variables
+int LoadStates[NUM_LOADS];
+int LoadStatesUpdate[NUM_LOADS];
+<<<<<<< Updated upstream
+int freqValues[FREQ_ARRAY_SIZE] = {0};
+int freqROCValues[FREQ_ARRAY_SIZE] = {0};
+int freq_index = 0;
+=======
+bool MaintenanceState = 0;
+bool UnstableState = 0;
+>>>>>>> Stashed changes
+
+// Local Function Prototypes
+int initOSDataStructs(void);
+int initCreateTasks(void);
+
+// Interrupt service routines
+void NewFreqISR(){
+<<<<<<< Updated upstream
+
+    #define SAMPLING_FREQUENCY 16000.0
+	double freq = SAMPLING_FREQUENCY/(double)IORD(FREQUENCY_ANALYSER_BASE, 0);
+
+
+	xQueueSendToBackFromISR(frequencyQ, &freq, pdFALSE);
+
+}
+void PushButtonISR(void* context, alt_u32 id)
+{
+	int* temp = (int*) context;
+	(*temp) = IORD_ALTERA_AVALON_PIO_EDGE_CAP(PUSH_BUTTON_BASE);
+
+	IOWR_ALTERA_AVALON_PIO_EDGE_CAP(PUSH_BUTTON_BASE, 0x7);
+}
+
+=======
+
+}
+void PushButtonISR(){
+	printf("button isr");
+	MaintenanceState = !MaintenanceState;
+	IOWR_ALTERA_AVALON_PIO_EDGE_CAP(PUSH_BUTTON_BASE, 0x7);
+
+
+}
+>>>>>>> Stashed changes
+void KeyboardISR(){
+
+}
+void SwitchPollingTask(void *pvParameters)
+{
+	int sw_result;
+	int i;
+	while (1)
+	{
+		// Read load values from switch
+		sw_result=IORD_ALTERA_AVALON_PIO_DATA(SLIDE_SWITCH_BASE);
+		printf("number is %d\n", sw_result);
+		// Filter and update LoadStatesUpdate
+		for (i=0; i < NUM_LOADS;i++){
+			LoadStatesUpdate[i] = (sw_result & (1 << i));
+		}
+		vTaskDelay(100);
+	}
+}
+
+void VGATask(void *pvParameters)
+{
+	while (1)
+	{
+//		printf("Starting timer");
+//		vTaskDelay(123);
+//		printf("Time was %d",alt_timestamp());
+		vTaskDelay(1000);
+
+	}
+}
+
+// The following task fills up a message queue with incrementing data.  The data
+// is not actually used by the application.  If the queue is full the task is
+// suspended for 1 second.
+void StabilityMonitorTask(void *pvParameters)
+{
+
+	double freq;
+
+	while (1)
+	{
+		xQueueReceive(frequencyQ, &freq, portMAX_DELAY);
+		//add frequencies to array
+		freqValues[freq_index] = freq;
+		if(freq_index == 0){
+			freqROCValues[0] = (freqValues[50] - freqValues[0])/(freqValues);
+		}else{
+			freqROCValues[freq_index] = freq_index
+		}
+		freq_index = freq_index + 1;
+
+		if(!managingLoads){
+			if(freqValues[last] < 50 || freqValues[last] > 50)
+
+		}
+
+
+		vTaskDelay(100);
+	}
+
+}
+
+// This task manages the loads turning them on and off based on the data in loadQ. If the system becomes
+// unstable LoadManagementTask ignores inputs from SwitchPollingTask and starts load shedding
+// The system can be put into management mode through a push button ISR
+void LoadControlTask(void *pvParameters)
+{
+	int switch_data = 0;
+	int loadValues = 0;
+	while (1)
+	{
+		if(management_flag == 0)// System is NOT in management state
+		{
+			if(xSemaphoreTake(sys_status_flag, portMAX_DELAY))//system is stable
+			{
+				xSemaphoreGive(sys_status_flag);
+				if(xQueueReceive(loadQ, &switch_data, portMAX_DELAY) == pdTRUE)
+				{
+					if (switch_data > loadValues){
+						loadValues = switch_data|loadValues;
+					}else
+					{
+						loadValues = switch_data;
+					}
+					//IOWR_ALTERA_AVLAON_PIO_DATA(RED_LEDS_BASE, switch_data);
+
+				}else{
+
+				}
+
+
+			}else 					//system is NOT stable
+			{
+				xSemaphoreGive(sys_status_flag);
+				//if a switch is turned on or off during load shedding
+				if(xQueueReceive(loadQ, &switch_data, portMAX_DELAY) == pdTRUE)
+				{
+					//only if switch is turned off change load status otherwise ignore switch value
+					if(switch_data < loadValues){
+						loadValues = switch_data;
+					}
+				}
+
+			}
+
+		}else					// System is in management state
+		{
+
+		}
+		vTaskDelay(1000);
+
+	}
+}
+
+void ManageLoadTask(void *pvParameters)
+{
+	while (1)
+	{
+		// run when unstable
+
+		vTaskDelay(1000);
+
+	}
+}
+
+void DebugTask(void *pvParameters)
+{
+//	FILE* fp;
+//	fp = fopen(CHARACTER_LCD_NAME, "w"); //open the character LCD as a file stream for write
+
+	while (1)
+	{
+		vTaskDelay(3000);
+
+//		fprintf(fp, "%c%sHello\n", 0x1b, "[2J"); //esc character (0x1b) followed by "[2J]" clears the screen
+//		usleep(1000000);
+//		fprintf(fp, "World!\n");
+//		usleep(1000000);
+//		fprintf(fp, "%c%sFrom NIOS II\n", 0x1b, "[2J");
+//		usleep(1000000);
+	}
+}
+
+void vTimerCallback(TimerHandle_t timer){
+	printf("BASED DEPARTMENT??? \n");
+}
+
+int main(int argc, char* argv[], char* envp[])
+{
+
+	initOSDataStructs();
+	initCreateTasks();
+	printf("started!!");
+	vTaskStartScheduler();
+	for (;;);
+	return 0;
+}
+
+// This function simply creates a message queue and a semaphore
+int initOSDataStructs(void)
+{
+	// QUEUES
+<<<<<<< Updated upstream
+	LoadQueue = xQueueCreate(MSG_QUEUE_SIZE, sizeof(float));
+	frequencyQ = xQueueCreate(MSG_QUEUE_SIZE, sizeof(float));
+=======
+	loadQ = xQueueCreate(MSG_QUEUE_SIZE, sizeof(float));
+>>>>>>> Stashed changes
+
+	// ISR
+	IOWR_ALTERA_AVALON_PIO_EDGE_CAP(PUSH_BUTTON_BASE, 0x7);
+	IOWR_ALTERA_AVALON_PIO_IRQ_MASK(PUSH_BUTTON_BASE, 0x1); // mask interrupt for button 1
+	alt_irq_register(PUSH_BUTTON_IRQ, NULL, PushButtonISR);
+//	alt_irq_register(FREQ_UPDATE_IRQ, 0, NewFreqISR);
+
+	// TIMER
+	TimerHandle_t unstable_timer;
+	unstable_timer = xTimerCreate("Timer", (pdMS_TO_TICKS(5000)),pdTRUE,(void *)0,vTimerCallback);
+	int debug = 0;
+	debug = xTimerStart(unstable_timer,0);
+
+	// SEMAPHORE
+	shared_resource_sem = xSemaphoreCreateCounting( 9999, 1 );
+	return 0;
+}
+
+// This function creates the tasks used in this example
+int initCreateTasks(void)
+{
+	xTaskCreate(VGATask, "VGATask", TASK_STACKSIZE, NULL, VGA_PRIORITY, NULL);
+	xTaskCreate(StabilityMonitorTask, "StabilityMonitorTask", TASK_STACKSIZE, NULL, STABILITY_PRIORITY, NULL);
+	//xTaskCreate(LoadControlTask, "LoadControlTask", TASK_STACKSIZE, NULL, LOAD_PRIORITY, NULL);
+	xTaskCreate(ManageLoadTask, "ManageLoadTask", TASK_STACKSIZE, NULL, MANAGE_PRIORITY, NULL);
+	xTaskCreate(SwitchPollingTask, "SwitchPollingTask", TASK_STACKSIZE, NULL, SWITCH_PRIORITY, NULL);
+	xTaskCreate(DebugTask, "DebugTask", TASK_STACKSIZE, NULL, DEBUG_PRIORITY, NULL);
+	return 0;
+}

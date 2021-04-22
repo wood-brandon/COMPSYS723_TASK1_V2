@@ -1,0 +1,13 @@
+!SESSION 2021-04-22 14:26:22.268 -----------------------------------------------
+eclipse.buildId=M20120208-0800
+java.version=1.6.0_23
+java.vendor=Sun Microsystems Inc.
+BootLoader constants: OS=win32, ARCH=x86, WS=win32, NL=en_NZ
+Framework arguments:  -product org.eclipse.epp.package.cpp.product -perspective com.altera.sbtgui.ui.cPerspective
+Command-line arguments:  -data C:\Users\nzbra\OneDrive\Desktop\723\good_ass1\Assignment1_V2\software -os win32 -ws win32 -arch x86 -product org.eclipse.epp.package.cpp.product -perspective com.altera.sbtgui.ui.cPerspective
+
+!ENTRY org.eclipse.cdt.core 1 0 2021-04-22 14:29:24.885
+!MESSAGE Indexed 'Assignment_1_v2_bsp' (97 sources, 146 headers) in 2.13 sec: 5,363 declarations; 9,520 references; 0 unresolved inclusions; 3 syntax errors; 18 unresolved names (0.12%)
+
+!ENTRY org.eclipse.cdt.core 1 0 2021-04-22 14:29:25.403
+!MESSAGE Indexed 'Assignment_1_v2' (9 sources, 89 headers) in 0.52 sec: 4,392 declarations; 8,548 references; 8 unresolved inclusions; 3 syntax errors; 50 unresolved names (0.38%)

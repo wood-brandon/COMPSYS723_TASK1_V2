@@ -1,0 +1,179 @@
+
+**** Build of configuration Nios II for project Assignment_1_v2 ****
+
+make all 
+      0 [main] sh 17276 find_fast_cwd: WARNING: Couldn't compute FAST_CWD pointer.  Please report this problem to
+the public mailing list cygwin@cygwin.com
+      0 [main] sh 9360 find_fast_cwd: WARNING: Couldn't compute FAST_CWD pointer.  Please report this problem to
+the public mailing list cygwin@cygwin.com
+      0 [main] echo 6412 find_fast_cwd: WARNING: Couldn't compute FAST_CWD pointer.  Please report this problem to
+Info: Building ../Assignment_1_v2_bsp/
+the public mailing list cygwin@cygwin.com
+make --no-print-directory -C ../Assignment_1_v2_bsp/
+      0 [main] pwd 4024 find_fast_cwd: WARNING: Couldn't compute FAST_CWD pointer.  Please report this problem to
+the public mailing list cygwin@cygwin.com
+      0 [main] sh 14940 find_fast_cwd: WARNING: Couldn't compute FAST_CWD pointer.  Please report this problem to
+the public mailing list cygwin@cygwin.com
+      0 [main] sh 2280 find_fast_cwd: WARNING: Couldn't compute FAST_CWD pointer.  Please report this problem to
+the public mailing list cygwin@cygwin.com
+[BSP build complete]
+      0 [main] echo 556 find_fast_cwd: WARNING: Couldn't compute FAST_CWD pointer.  Please report this problem to
+Info: Compiling freertos/croutine.c to obj/default/freertos/croutine.o
+the public mailing list cygwin@cygwin.com
+      0 [main] mkdir 18716 find_fast_cwd: WARNING: Couldn't compute FAST_CWD pointer.  Please report this problem to
+nios2-elf-gcc -xc -MP -MMD -c -I../Assignment_1_v2_bsp//HAL/inc -I../Assignment_1_v2_bsp/ -I../Assignment_1_v2_bsp//drivers/inc  -DSYSTEM_BUS_WIDTH=32 -pipe -D__hal__ -DALT_NO_INSTRUCTION_EMULATION -DALT_SINGLE_THREADED    -O0 -g -Wall   -EL -mhw-div -mhw-mul -mno-hw-mulx  -o obj/default/freertos/croutine.o freertos/croutine.c
+the public mailing list cygwin@cygwin.com
+      0 [main] echo 6632 find_fast_cwd: WARNING: Couldn't compute FAST_CWD pointer.  Please report this problem to
+Info: Compiling freertos/event_groups.c to obj/default/freertos/event_groups.o
+the public mailing list cygwin@cygwin.com
+      0 [main] mkdir 18656 find_fast_cwd: WARNING: Couldn't compute FAST_CWD pointer.  Please report this problem to
+nios2-elf-gcc -xc -MP -MMD -c -I../Assignment_1_v2_bsp//HAL/inc -I../Assignment_1_v2_bsp/ -I../Assignment_1_v2_bsp//drivers/inc  -DSYSTEM_BUS_WIDTH=32 -pipe -D__hal__ -DALT_NO_INSTRUCTION_EMULATION -DALT_SINGLE_THREADED    -O0 -g -Wall   -EL -mhw-div -mhw-mul -mno-hw-mulx  -o obj/default/freertos/event_groups.o freertos/event_groups.c
+the public mailing list cygwin@cygwin.com
+      0 [main] echo 11180 find_fast_cwd: WARNING: Couldn't compute FAST_CWD pointer.  Please report this problem to
+the public mailing list cygwin@cygwin.com
+Info: Compiling freertos/heap.c to obj/default/freertos/heap.o
+      0 [main] mkdir 13176 find_fast_cwd: WARNING: Couldn't compute FAST_CWD pointer.  Please report this problem to
+nios2-elf-gcc -xc -MP -MMD -c -I../Assignment_1_v2_bsp//HAL/inc -I../Assignment_1_v2_bsp/ -I../Assignment_1_v2_bsp//drivers/inc  -DSYSTEM_BUS_WIDTH=32 -pipe -D__hal__ -DALT_NO_INSTRUCTION_EMULATION -DALT_SINGLE_THREADED    -O0 -g -Wall   -EL -mhw-div -mhw-mul -mno-hw-mulx  -o obj/default/freertos/heap.o freertos/heap.c
+the public mailing list cygwin@cygwin.com
+      0 [main] echo 2376 find_fast_cwd: WARNING: Couldn't compute FAST_CWD pointer.  Please report this problem to
+the public mailing list cygwin@cygwin.com
+Info: Compiling freertos/list.c to obj/default/freertos/list.o
+      0 [main] mkdir 14856 find_fast_cwd: WARNING: Couldn't compute FAST_CWD pointer.  Please report this problem to
+nios2-elf-gcc -xc -MP -MMD -c -I../Assignment_1_v2_bsp//HAL/inc -I../Assignment_1_v2_bsp/ -I../Assignment_1_v2_bsp//drivers/inc  -DSYSTEM_BUS_WIDTH=32 -pipe -D__hal__ -DALT_NO_INSTRUCTION_EMULATION -DALT_SINGLE_THREADED    -O0 -g -Wall   -EL -mhw-div -mhw-mul -mno-hw-mulx  -o obj/default/freertos/list.o freertos/list.c
+the public mailing list cygwin@cygwin.com
+      0 [main] echo 18100 find_fast_cwd: WARNING: Couldn't compute FAST_CWD pointer.  Please report this problem to
+Info: Compiling freertos/port.c to obj/default/freertos/port.o
+the public mailing list cygwin@cygwin.com
+      0 [main] mkdir 16376 find_fast_cwd: WARNING: Couldn't compute FAST_CWD pointer.  Please report this problem to
+nios2-elf-gcc -xc -MP -MMD -c -I../Assignment_1_v2_bsp//HAL/inc -I../Assignment_1_v2_bsp/ -I../Assignment_1_v2_bsp//drivers/inc  -DSYSTEM_BUS_WIDTH=32 -pipe -D__hal__ -DALT_NO_INSTRUCTION_EMULATION -DALT_SINGLE_THREADED    -O0 -g -Wall   -EL -mhw-div -mhw-mul -mno-hw-mulx  -o obj/default/freertos/port.o freertos/port.c
+the public mailing list cygwin@cygwin.com
+freertos/port.c:90:1: warning: "configTICK_RATE_HZ" redefined
+In file included from freertos/FreeRTOS.h:98,
+                 from freertos/port.c:84:
+freertos/FreeRTOSConfig.h:97:1: warning: this is the location of the previous definition
+freertos/port.c:91:1: warning: "configCPU_CLOCK_HZ" redefined
+freertos/FreeRTOSConfig.h:98:1: warning: this is the location of the previous definition
+freertos/port.c: In function 'vApplicationStackOverflowHook':
+freertos/port.c:96: warning: implicit declaration of function 'printf'
+freertos/port.c:96: warning: incompatible implicit declaration of built-in function 'printf'
+      0 [main] echo 7856 find_fast_cwd: WARNING: Couldn't compute FAST_CWD pointer.  Please report this problem to
+Info: Compiling freertos/queue.c to obj/default/freertos/queue.o
+the public mailing list cygwin@cygwin.com
+      0 [main] mkdir 19364 find_fast_cwd: WARNING: Couldn't compute FAST_CWD pointer.  Please report this problem to
+nios2-elf-gcc -xc -MP -MMD -c -I../Assignment_1_v2_bsp//HAL/inc -I../Assignment_1_v2_bsp/ -I../Assignment_1_v2_bsp//drivers/inc  -DSYSTEM_BUS_WIDTH=32 -pipe -D__hal__ -DALT_NO_INSTRUCTION_EMULATION -DALT_SINGLE_THREADED    -O0 -g -Wall   -EL -mhw-div -mhw-mul -mno-hw-mulx  -o obj/default/freertos/queue.o freertos/queue.c
+the public mailing list cygwin@cygwin.com
+      0 [main] echo 18980 find_fast_cwd: WARNING: Couldn't compute FAST_CWD pointer.  Please report this problem to
+Info: Compiling freertos/tasks.c to obj/default/freertos/tasks.o
+the public mailing list cygwin@cygwin.com
+      0 [main] mkdir 1672 find_fast_cwd: WARNING: Couldn't compute FAST_CWD pointer.  Please report this problem to
+nios2-elf-gcc -xc -MP -MMD -c -I../Assignment_1_v2_bsp//HAL/inc -I../Assignment_1_v2_bsp/ -I../Assignment_1_v2_bsp//drivers/inc  -DSYSTEM_BUS_WIDTH=32 -pipe -D__hal__ -DALT_NO_INSTRUCTION_EMULATION -DALT_SINGLE_THREADED    -O0 -g -Wall   -EL -mhw-div -mhw-mul -mno-hw-mulx  -o obj/default/freertos/tasks.o freertos/tasks.c
+the public mailing list cygwin@cygwin.com
+      0 [main] echo 2504 find_fast_cwd: WARNING: Couldn't compute FAST_CWD pointer.  Please report this problem to
+Info: Compiling freertos/timers.c to obj/default/freertos/timers.o
+the public mailing list cygwin@cygwin.com
+      0 [main] mkdir 19764 find_fast_cwd: WARNING: Couldn't compute FAST_CWD pointer.  Please report this problem to
+nios2-elf-gcc -xc -MP -MMD -c -I../Assignment_1_v2_bsp//HAL/inc -I../Assignment_1_v2_bsp/ -I../Assignment_1_v2_bsp//drivers/inc  -DSYSTEM_BUS_WIDTH=32 -pipe -D__hal__ -DALT_NO_INSTRUCTION_EMULATION -DALT_SINGLE_THREADED    -O0 -g -Wall   -EL -mhw-div -mhw-mul -mno-hw-mulx  -o obj/default/freertos/timers.o freertos/timers.c
+the public mailing list cygwin@cygwin.com
+      0 [main] echo 10308 find_fast_cwd: WARNING: Couldn't compute FAST_CWD pointer.  Please report this problem to
+Info: Compiling hello_world.c to obj/default/hello_world.o
+the public mailing list cygwin@cygwin.com
+      0 [main] mkdir 11780 find_fast_cwd: WARNING: Couldn't compute FAST_CWD pointer.  Please report this problem to
+nios2-elf-gcc -xc -MP -MMD -c -I../Assignment_1_v2_bsp//HAL/inc -I../Assignment_1_v2_bsp/ -I../Assignment_1_v2_bsp//drivers/inc  -DSYSTEM_BUS_WIDTH=32 -pipe -D__hal__ -DALT_NO_INSTRUCTION_EMULATION -DALT_SINGLE_THREADED    -O0 -g -Wall   -EL -mhw-div -mhw-mul -mno-hw-mulx  -o obj/default/hello_world.o hello_world.c
+the public mailing list cygwin@cygwin.com
+hello_world.c: In function 'StabilityMonitorTask':
+hello_world.c:131: error: 'freqThreshold' undeclared (first use in this function)
+hello_world.c:131: error: (Each undeclared identifier is reported only once
+hello_world.c:131: error: for each function it appears in.)
+hello_world.c:131: error: 'ROCThreshold' undeclared (first use in this function)
+hello_world.c:133: error: 'managementstate' undeclared (first use in this function)
+hello_world.c:139: error: 'for' loop initial declaration used outside C99 mode
+hello_world.c:147: warning: implicit declaration of function 'LoadDisconnect'
+hello_world.c: At top level:
+hello_world.c:167: warning: conflicting types for 'LoadDisconnect'
+hello_world.c:147: warning: previous implicit declaration of 'LoadDisconnect' was here
+hello_world.c: In function 'LoadDisconnect':
+hello_world.c:169: error: 'for' loop initial declaration used outside C99 mode
+hello_world.c: In function 'LoadControlTask':
+hello_world.c:195: error: 'loadQ' undeclared (first use in this function)
+hello_world.c:197: error: 'loadValues' undeclared (first use in this function)
+hello_world.c:202: error: expected ';' before '}' token
+hello_world.c:203: warning: implicit declaration of function 'IOWR_ALTERA_AVLAON_PIO_DATA'
+make: *** [obj/default/hello_world.o] Error 1
+
+**** Build Finished ****
+
+**** Build of configuration Nios II for project Assignment_1_v2_bsp ****
+
+make all 
+      0 [main] pwd 16748 find_fast_cwd: WARNING: Couldn't compute FAST_CWD pointer.  Please report this problem to
+the public mailing list cygwin@cygwin.com
+      0 [main] sh 20468 find_fast_cwd: WARNING: Couldn't compute FAST_CWD pointer.  Please report this problem to
+the public mailing list cygwin@cygwin.com
+      0 [main] sh 5476 find_fast_cwd: WARNING: Couldn't compute FAST_CWD pointer.  Please report this problem to
+the public mailing list cygwin@cygwin.com
+[BSP build complete]
+
+**** Build Finished ****
+
+**** Build of configuration Nios II for project Assignment_1_v2 ****
+
+make all 
+      0 [main] sh 15468 find_fast_cwd: WARNING: Couldn't compute FAST_CWD pointer.  Please report this problem to
+the public mailing list cygwin@cygwin.com
+      0 [main] sh 20172 find_fast_cwd: WARNING: Couldn't compute FAST_CWD pointer.  Please report this problem to
+the public mailing list cygwin@cygwin.com
+      0 [main] echo 19128 find_fast_cwd: WARNING: Couldn't compute FAST_CWD pointer.  Please report this problem to
+Info: Building ../Assignment_1_v2_bsp/
+the public mailing list cygwin@cygwin.com
+make --no-print-directory -C ../Assignment_1_v2_bsp/
+      0 [main] pwd 10532 find_fast_cwd: WARNING: Couldn't compute FAST_CWD pointer.  Please report this problem to
+the public mailing list cygwin@cygwin.com
+      0 [main] sh 3328 find_fast_cwd: WARNING: Couldn't compute FAST_CWD pointer.  Please report this problem to
+the public mailing list cygwin@cygwin.com
+      0 [main] sh 3464 find_fast_cwd: WARNING: Couldn't compute FAST_CWD pointer.  Please report this problem to
+the public mailing list cygwin@cygwin.com
+[BSP build complete]
+      0 [main] echo 20388 find_fast_cwd: WARNING: Couldn't compute FAST_CWD pointer.  Please report this problem to
+the public mailing list cygwin@cygwin.com
+Info: Compiling hello_world.c to obj/default/hello_world.o
+      0 [main] mkdir 15632 find_fast_cwd: WARNING: Couldn't compute FAST_CWD pointer.  Please report this problem to
+nios2-elf-gcc -xc -MP -MMD -c -I../Assignment_1_v2_bsp//HAL/inc -I../Assignment_1_v2_bsp/ -I../Assignment_1_v2_bsp//drivers/inc  -DSYSTEM_BUS_WIDTH=32 -pipe -D__hal__ -DALT_NO_INSTRUCTION_EMULATION -DALT_SINGLE_THREADED    -O0 -g -Wall   -EL -mhw-div -mhw-mul -mno-hw-mulx  -o obj/default/hello_world.o hello_world.c
+the public mailing list cygwin@cygwin.com
+hello_world.c:37: error: expected identifier or '(' before '<<' token
+hello_world.c:40: error: expected identifier or '(' before '==' token
+hello_world.c:42: error: expected identifier or '(' before '>>' token
+hello_world.c:56: error: expected identifier or '(' before '<<' token
+hello_world.c:60: error: expected identifier or '(' before '==' token
+hello_world.c:63: error: expected identifier or '(' before '>>' token
+hello_world.c: In function 'NewFreqISR':
+hello_world.c:71: error: expected expression before '<<' token
+hello_world.c:77: error: 'freq' undeclared (first use in this function)
+hello_world.c:77: error: (Each undeclared identifier is reported only once
+hello_world.c:77: error: for each function it appears in.)
+hello_world.c: At top level:
+hello_world.c:88: error: expected identifier or '(' before '==' token
+hello_world.c:91: error: redefinition of 'PushButtonISR'
+hello_world.c:81: error: previous definition of 'PushButtonISR' was here
+hello_world.c: In function 'PushButtonISR':
+hello_world.c:91: error: number of arguments doesn't match prototype
+hello_world.c:81: error: prototype declaration
+hello_world.c:93: error: 'MaintenanceState' undeclared (first use in this function)
+hello_world.c: At top level:
+hello_world.c:98: error: expected identifier or '(' before '>>' token
+hello_world.c: In function 'StabilityMonitorTask':
+hello_world.c:143: error: 'freqValues' undeclared (first use in this function)
+hello_world.c:148: error: expected ';' before '}' token
+hello_world.c:151: error: 'managingLoads' undeclared (first use in this function)
+hello_world.c:152: error: 'last' undeclared (first use in this function)
+hello_world.c:154: error: expected expression before '}' token
+hello_world.c: In function 'LoadControlTask':
+hello_world.c:176: error: 'loadQ' undeclared (first use in this function)
+hello_world.c: In function 'main':
+hello_world.c:250: warning: implicit declaration of function 'initOSDataStructs'
+hello_world.c: In function 'initOSDataStructs':
+hello_world.c:262: error: expected expression before '<<' token
+hello_world.c:265: error: expected expression before '==' token
+hello_world.c:267: error: expected expression before '>>' token
+make: *** [obj/default/hello_world.o] Error 1
+
+**** Build Finished ****

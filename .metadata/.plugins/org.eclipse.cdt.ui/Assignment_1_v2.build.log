@@ -1,0 +1,63 @@
+
+**** Build of configuration Nios II for project Assignment_1_v2 ****
+
+make all 
+      0 [main] sh 15468 find_fast_cwd: WARNING: Couldn't compute FAST_CWD pointer.  Please report this problem to
+the public mailing list cygwin@cygwin.com
+      0 [main] sh 20172 find_fast_cwd: WARNING: Couldn't compute FAST_CWD pointer.  Please report this problem to
+the public mailing list cygwin@cygwin.com
+      0 [main] echo 19128 find_fast_cwd: WARNING: Couldn't compute FAST_CWD pointer.  Please report this problem to
+Info: Building ../Assignment_1_v2_bsp/
+the public mailing list cygwin@cygwin.com
+make --no-print-directory -C ../Assignment_1_v2_bsp/
+      0 [main] pwd 10532 find_fast_cwd: WARNING: Couldn't compute FAST_CWD pointer.  Please report this problem to
+the public mailing list cygwin@cygwin.com
+      0 [main] sh 3328 find_fast_cwd: WARNING: Couldn't compute FAST_CWD pointer.  Please report this problem to
+the public mailing list cygwin@cygwin.com
+      0 [main] sh 3464 find_fast_cwd: WARNING: Couldn't compute FAST_CWD pointer.  Please report this problem to
+the public mailing list cygwin@cygwin.com
+[BSP build complete]
+      0 [main] echo 20388 find_fast_cwd: WARNING: Couldn't compute FAST_CWD pointer.  Please report this problem to
+the public mailing list cygwin@cygwin.com
+Info: Compiling hello_world.c to obj/default/hello_world.o
+      0 [main] mkdir 15632 find_fast_cwd: WARNING: Couldn't compute FAST_CWD pointer.  Please report this problem to
+nios2-elf-gcc -xc -MP -MMD -c -I../Assignment_1_v2_bsp//HAL/inc -I../Assignment_1_v2_bsp/ -I../Assignment_1_v2_bsp//drivers/inc  -DSYSTEM_BUS_WIDTH=32 -pipe -D__hal__ -DALT_NO_INSTRUCTION_EMULATION -DALT_SINGLE_THREADED    -O0 -g -Wall   -EL -mhw-div -mhw-mul -mno-hw-mulx  -o obj/default/hello_world.o hello_world.c
+the public mailing list cygwin@cygwin.com
+hello_world.c:37: error: expected identifier or '(' before '<<' token
+hello_world.c:40: error: expected identifier or '(' before '==' token
+hello_world.c:42: error: expected identifier or '(' before '>>' token
+hello_world.c:56: error: expected identifier or '(' before '<<' token
+hello_world.c:60: error: expected identifier or '(' before '==' token
+hello_world.c:63: error: expected identifier or '(' before '>>' token
+hello_world.c: In function 'NewFreqISR':
+hello_world.c:71: error: expected expression before '<<' token
+hello_world.c:77: error: 'freq' undeclared (first use in this function)
+hello_world.c:77: error: (Each undeclared identifier is reported only once
+hello_world.c:77: error: for each function it appears in.)
+hello_world.c: At top level:
+hello_world.c:88: error: expected identifier or '(' before '==' token
+hello_world.c:91: error: redefinition of 'PushButtonISR'
+hello_world.c:81: error: previous definition of 'PushButtonISR' was here
+hello_world.c: In function 'PushButtonISR':
+hello_world.c:91: error: number of arguments doesn't match prototype
+hello_world.c:81: error: prototype declaration
+hello_world.c:93: error: 'MaintenanceState' undeclared (first use in this function)
+hello_world.c: At top level:
+hello_world.c:98: error: expected identifier or '(' before '>>' token
+hello_world.c: In function 'StabilityMonitorTask':
+hello_world.c:143: error: 'freqValues' undeclared (first use in this function)
+hello_world.c:148: error: expected ';' before '}' token
+hello_world.c:151: error: 'managingLoads' undeclared (first use in this function)
+hello_world.c:152: error: 'last' undeclared (first use in this function)
+hello_world.c:154: error: expected expression before '}' token
+hello_world.c: In function 'LoadControlTask':
+hello_world.c:176: error: 'loadQ' undeclared (first use in this function)
+hello_world.c: In function 'main':
+hello_world.c:250: warning: implicit declaration of function 'initOSDataStructs'
+hello_world.c: In function 'initOSDataStructs':
+hello_world.c:262: error: expected expression before '<<' token
+hello_world.c:265: error: expected expression before '==' token
+hello_world.c:267: error: expected expression before '>>' token
+make: *** [obj/default/hello_world.o] Error 1
+
+**** Build Finished ****
