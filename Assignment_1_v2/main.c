@@ -33,7 +33,7 @@
 #define   	MSG_QUEUE_SIZE  30
 #define   	NUM_LOADS 5
 QueueHandle_t LoadQueue;
-xQueueHandle frequencyQ;
+QueueHandle_t frequencyQ;
 
 // used to delete a task
 TaskHandle_t xHandle;
@@ -46,10 +46,13 @@ SemaphoreHandle_t shared_resource_sem;
 // globals variables
 int LoadStates[NUM_LOADS];
 int LoadStatesUpdate[NUM_LOADS];
-int freqValues[FREQ_ARRAY_SIZE] = {0};
-int freqROCValues[FREQ_ARRAY_SIZE] = {0};
+float freqValues[FREQ_ARRAY_SIZE] = {0};
+float freqROCValues[FREQ_ARRAY_SIZE] = {0};
 int freq_index = 0;
-bool loadshedding;
+int ROCThreshold = 100;
+int freqThreshold = 50;
+bool loadshedding = false;
+bool managementState = false;
 
 // Local Function Prototypes
 int initOSDataStructs(void);
@@ -61,9 +64,9 @@ void NewFreqISR(){
     #define SAMPLING_FREQUENCY 16000.0
 	double freq = SAMPLING_FREQUENCY/(double)IORD(FREQUENCY_ANALYSER_BASE, 0);
 
-
 	xQueueSendToBackFromISR(frequencyQ, &freq, pdFALSE);
-
+	printf("Exiting ISR\n");
+	return;
 }
 void PushButtonISR(void* context, alt_u32 id)
 {
@@ -80,18 +83,43 @@ void SwitchPollingTask(void *pvParameters)
 {
 	int sw_result;
 	int i;
-	bool j;
+	unsigned int change = 0;
+
 	while (1)
 	{
+		bool j[NUM_LOADS];
 		// Read load values from switch
 		sw_result=IORD_ALTERA_AVALON_PIO_DATA(SLIDE_SWITCH_BASE);
 		printf("number is %d\n", sw_result);
 		// Filter and update LoadStatesUpdate
 		for (i=0; i < NUM_LOADS;i++){
-			LoadStatesUpdate[i] = (sw_result & (1 << i));
+			j[i] = (bool) (sw_result & (1 << i));
+
 		}
+
+		//if load shedding
+		xSemaphoreTake(sys_status_flag, portMAX_DELAY);
+		if(loadshedding){
+			for(i = 0; i<NUM_LOADS; i++){
+				//only turn off loads
+				LoadStates[i] = LoadStates[i] && j[i];
+			}
+		}else{
+			for(i = 0; i<NUM_LOADS; i++){
+				//otherwise do what you want
+				LoadStates[i] = j[i];
+			}
+		}
+		xSemaphoreGive(sys_status_flag);
+
+
+
+		xQueueSend(LoadQueue,(void*)&change, 0);
 		vTaskDelay(100);
 	}
+
+
+
 }
 
 void VGATask(void *pvParameters)
@@ -110,61 +138,72 @@ void StabilityMonitorTask(void *pvParameters)
 {
 
 	double freq;
-
+	//index used to check freqValues and freqROCValues for unstability
+	int index;
 	while (1)
 	{
-		xQueueReceive(frequencyQ, &freq, portMAX_DELAY);
-		//add frequencies to array
-		freqValues[freq_index] = freq;
-		if(freq_index == 0){
-			freqROCValues[0] = (freqValues[0]-freqValues[99])*2.0*freqValues[0]*freqValues[99]/(freqValues[0]+freqValues[99]);
-		}else{
-			freqROCValues[freq_index] = (freqValues[freq_index]-freqValues[freq_index-1])*2.0*freqValues[freq_index]*freqValues[freq_index-1]/(freqValues[freq_index]+freqValues[freq_index-1]);
-		}
-		freq_index = (freq_index + 1)%100;
+	    if(xQueueReceive(frequencyQ, &freq, portMAX_DELAY)==pdTRUE)
+	    {
 
-
-
-
-		if(freqValues[freq_index] < freqThreshold || freqROCValues[freq_index] > ROCThreshold)
-		{
-			if(!managementstate)
-			{
-				//set loadshedding state to true
-				loadshedding = true;
-
-				//copy the current state of the loads to update array and immediately shed a load
-				for(int i = 0; i < NUM_LOADS; i++)
-				{
-					xSemaphoreTake(sys_status_flag, portMAX_DELAY);
-					LoadStatesUpdate[i] = LoadStates[i];
-					xSemaphoreGive(sys_status_flag);
-				}
-
-				//shed first low priority load
-				LoadDisconnect();
-
-
+			//add frequencies to array
+			freqValues[freq_index] = freq;
+			//calculation for frequency rate of change
+			if(freq_index == 0){
+				freqROCValues[0] = (freqValues[0]-freqValues[49])*2.0*freqValues[0]*freqValues[49]/(freqValues[0]+freqValues[49]);
+			}else{
+				freqROCValues[freq_index] = (freqValues[freq_index]-freqValues[freq_index-1])*2.0*freqValues[freq_index]*freqValues[freq_index-1]/(freqValues[freq_index]+freqValues[freq_index-1]);
 			}
 
-		}
-		else{
+			freq_index = (freq_index + 1)%50;
 
-		}
+			if (freq_index == 0){
+				index = FREQ_ARRAY_SIZE-1;
+			}else{
+				index = freq_index -1;
+			}
+
+			if(!managementState){
+
+				if(freqValues[index] < freqThreshold || fabs(freqROCValues[index]) > ROCThreshold)
+				{
+					if(!loadshedding)
+					{
+
+						//set loadshedding state to true
+						loadshedding = true;
+						int i;
+						//copy the current state of the loads to update array and immediately shed a load
+						for(i = 0; i < NUM_LOADS; i++)
+						{
+							xSemaphoreTake(sys_status_flag, portMAX_DELAY);
+							LoadStatesUpdate[i] = LoadStates[i];
+
+							xSemaphoreGive(sys_status_flag);
+						}
+
+						//shed first low priority load
+						LoadDisconnect();
 
 
+					}
+
+				}
+				else{
+					printf("Stable\n");
+				}
 
 
+	    	}
 
-
-		vTaskDelay(100);
+	    }
+	    //vTaskDelay(100);
 	}
-
 }
 
 void LoadDisconnect(){
+	int i;
 
-	for(int i=0; i<NUM_LOADS; i++ )
+	for(i=0; i<NUM_LOADS; i++ )
 	{
 		if(LoadStates[i] == 1)
 		{
@@ -181,49 +220,19 @@ void LoadDisconnect(){
 // The system can be put into management mode through a push button ISR
 void LoadControlTask(void *pvParameters)
 {
-	int switch_data = 0;
+	unsigned int *change;
 
 	while (1)
 	{
-		if(management_flag == 0)// System is NOT in management state
-		{
-			if(xSemaphoreTake(sys_status_flag, portMAX_DELAY))//system is stable
-			{
-				xSemaphoreGive(sys_status_flag);
-				if(xQueueReceive(loadQ, &switch_data, portMAX_DELAY) == pdTRUE)
-				{
-					if (switch_data > loadValues){
-						loadValues = switch_data|loadValues;
-					}else
-					{
-						loadValues = switch_data
-					}
-					IOWR_ALTERA_AVLAON_PIO_DATA(RED_LEDS_BASE, switch_data);
+		xQueueReceive(LoadQueue, &change, portMAX_DELAY);
 
-				}else{
-
-				}
+		if(loadshedding){
 
 
-			}else 					//system is NOT stable
-			{
-				xSemaphoreGive(sys_status_flag);
-				//if a switch is turned on or off during load shedding
-				if(xQueueReceive(loadQ, &switch_data, portMAX_DELAY) == pdTRUE)
-				{
-					//only if switch is turned off change load status otherwise ignore switch value
-					if(switch_data < loadValues){
-						loadValues = switch_data;
-					}
-				}
 
-			}
-
-		}else					// System is in management state
-		{
+		}else{
 
 		}
-		vTaskDelay(1000);
 
 	}
 }
@@ -270,13 +279,13 @@ int initOSDataStructs(void)
 {
 	// QUEUES
 	LoadQueue = xQueueCreate(MSG_QUEUE_SIZE, sizeof(float));
-	frequencyQ = xQueueCreate(MSG_QUEUE_SIZE, sizeof(float));
+	frequencyQ = xQueueCreate(MSG_QUEUE_SIZE, sizeof(double));
 
 	// ISR
 	IOWR_ALTERA_AVALON_PIO_EDGE_CAP(PUSH_BUTTON_BASE, 0x7);
 	IOWR_ALTERA_AVALON_PIO_IRQ_MASK(PUSH_BUTTON_BASE, 0x1); // mask interrupt for button 1
 	alt_irq_register(PUSH_BUTTON_IRQ, 0, PushButtonISR);
-//	alt_irq_register(FREQ_UPDATE_IRQ, 0, NewFreqISR);
+	alt_irq_register(FREQUENCY_ANALYSER_IRQ, 0, NewFreqISR);
 
 	// SEMAPHORE
 	shared_resource_sem = xSemaphoreCreateCounting( 9999, 1 );
@@ -286,11 +295,11 @@ int initOSDataStructs(void)
 // This function creates the tasks used in this example
 int initCreateTasks(void)
 {
-	xTaskCreate(VGATask, "VGATask", TASK_STACKSIZE, NULL, VGA_PRIORITY, NULL);
+	//xTaskCreate(VGATask, "VGATask", TASK_STACKSIZE, NULL, VGA_PRIORITY, NULL);
 	xTaskCreate(StabilityMonitorTask, "StabilityMonitorTask", TASK_STACKSIZE, NULL, STABILITY_PRIORITY, NULL);
-	xTaskCreate(LoadControlTask, "LoadControlTask", TASK_STACKSIZE, NULL, LOAD_PRIORITY, NULL);
-	xTaskCreate(ManageLoadTask, "ManageLoadTask", TASK_STACKSIZE, NULL, MANAGE_PRIORITY, NULL);
+	//xTaskCreate(LoadControlTask, "LoadControlTask", TASK_STACKSIZE, NULL, LOAD_PRIORITY, NULL);
+	//xTaskCreate(ManageLoadTask, "ManageLoadTask", TASK_STACKSIZE, NULL, MANAGE_PRIORITY, NULL);
 	xTaskCreate(SwitchPollingTask, "SwitchPollingTask", TASK_STACKSIZE, NULL, SWITCH_PRIORITY, NULL);
-	xTaskCreate(DebugTask, "DebugTask", TASK_STACKSIZE, NULL, DEBUG_PRIORITY, NULL);
+	//xTaskCreate(DebugTask, "DebugTask", TASK_STACKSIZE, NULL, DEBUG_PRIORITY, NULL);
 	return 0;
 }
