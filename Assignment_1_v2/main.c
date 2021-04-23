@@ -4,6 +4,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdbool.h>
+#include <math.h>
 
 // Scheduler includes
 #include "freertos/FreeRTOS.h"
@@ -73,6 +74,7 @@ char Threshold_Input_Buffer[3];
 int initOSDataStructs(void);
 int initCreateTasks(void);
 void initDevices(void);
+void LoadDisconnect(void);
 
 // ----------Interrupt service routines
 void NewFreqISR(){
@@ -120,21 +122,38 @@ void SwitchPollingTask(void *pvParameters)
 {
 	int sw_result;
 	int i;
-	bool j;
+	unsigned int change = 0;
+
 	while (1)
 	{
+		bool j[NUM_LOADS];
 		// Read load values from switch
 		sw_result=IORD_ALTERA_AVALON_PIO_DATA(SLIDE_SWITCH_BASE);
-//		printf("number is %d\n", sw_result);
+		printf("number is %d\n", sw_result);
 		// Filter and update LoadStatesUpdate
 		for (i=0; i < NUM_LOADS;i++){
-			j = (bool) (sw_result & (1 << i));
-//			printf("load %d is %d\n",i,j);
+			j[i] = (bool) (sw_result & (1 << i));
+
 		}
-			//LoadStatesUpdate[i] = (sw_result & (1 << i));
+
+		//if load shedding
+		xSemaphoreTake(sys_status_flag, portMAX_DELAY);
+		if(loadshedding){
+			for(i = 0; i<NUM_LOADS; i++){
+				//only turn off loads
+				LoadStates[i] = LoadStates[i] && j[i];
+			}
+		}else{
+			for(i = 0; i<NUM_LOADS; i++){
+				//otherwise do what you want
+				LoadStates[i] = j[i];
+			}
+		}
+		xSemaphoreGive(sys_status_flag);
 
 
-		//xQueueSend(LoadQueue,&sw_result,pdFALSE);
+
+		xQueueSend(LoadQueue,(void*)&change, 0);
 		vTaskDelay(100);
 	}
 
@@ -158,43 +177,40 @@ void StabilityMonitorTask(void *pvParameters)
 {
 
 	double freq;
-	int test;
+	//index used to check freqValues and freqROCValues for unstability
 	int index;
 	while (1)
 	{
-	    if(xQueueReceive(frequencyQ, &freq, portMAX_DELAY)==pdTRUE){
-	    	test = uxQueueSpacesAvailable(frequencyQ);
-	    	//printf("Recieved message! Spaces in queue = %d\n", test);
+	    if(xQueueReceive(frequencyQ, &freq, portMAX_DELAY)==pdTRUE)
+	    {
+
 			//add frequencies to array
 			freqValues[freq_index] = freq;
+			//calculation for frequency rate of change
 			if(freq_index == 0){
 				freqROCValues[0] = (freqValues[0]-freqValues[49])*2.0*freqValues[0]*freqValues[49]/(freqValues[0]+freqValues[49]);
 			}else{
 				freqROCValues[freq_index] = (freqValues[freq_index]-freqValues[freq_index-1])*2.0*freqValues[freq_index]*freqValues[freq_index-1]/(freqValues[freq_index]+freqValues[freq_index-1]);
 			}
-//			printf("%f\n", freqValues[freq_index]);
-//			printf("%f\n", freqROCValues[freq_index]);
-			freq_index = (freq_index + 1)%49;
-//			printf("freqindex=%d\n",freq_index);
-//
-//	    	printf("ROCThreshold = %f\n",ROCThreshold);
 
-	    	if (freq_index == 0){
-	    		index = FREQ_ARRAY_SIZE-1;
-	    	} else {
-	    		index = freq_index -1;
-	    	}
+			freq_index = (freq_index + 1)%50;
+
+			if (freq_index == 0){
+				index = FREQ_ARRAY_SIZE-1;
+			}else{
+				index = freq_index -1;
+			}
 
 			if(!managementState){
 
-				if(freqValues[index] < freqThreshold || freqROCValues[index] > ROCThreshold)
+				if(freqValues[index] < freqThreshold || fabs(freqROCValues[index]) > ROCThreshold)
 				{
 					if(!loadshedding)
 					{
 						printf("unstable\n");
 
 						//set loadshedding state to true
-						/*loadshedding = true;
+						loadshedding = true;
 						int i;
 						//copy the current state of the loads to update array and immediately shed a load
 						for(i = 0; i < NUM_LOADS; i++)
@@ -203,10 +219,10 @@ void StabilityMonitorTask(void *pvParameters)
 							LoadStatesUpdate[i] = LoadStates[i];
 
 							xSemaphoreGive(sys_status_flag);
-						}*/
+						}
 
 						//shed first low priority load
-						//LoadDisconnect();
+						LoadDisconnect();
 
 
 					}
@@ -217,14 +233,11 @@ void StabilityMonitorTask(void *pvParameters)
 				}
 
 
+	    	}
 
-			}
 	    }
-
-
-		//vTaskDelay(100);
+	    //vTaskDelay(100);
 	}
-
 }
 
 void LoadDisconnect(){
@@ -247,12 +260,20 @@ void LoadDisconnect(){
 // The system can be put into management mode through a push button ISR
 void LoadControlTask(void *pvParameters)
 {
+	unsigned int *change;
 
 
 	while (1)
 	{
+		xQueueReceive(LoadQueue, &change, portMAX_DELAY);
 
-		vTaskDelay(1000);
+		if(loadshedding){
+
+
+
+		}else{
+
+		}
 
 	}
 }

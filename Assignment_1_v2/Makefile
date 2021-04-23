@@ -142,7 +142,6 @@ ACDS_VERSION := 13.0
 ELF := Assignment_1_v2.elf
 
 # Paths to C, C++, and assembly source files.
-C_SRCS += hello_world.c
 C_SRCS += freertos/croutine.c
 C_SRCS += freertos/event_groups.c
 C_SRCS += freertos/heap.c
@@ -151,6 +150,7 @@ C_SRCS += freertos/port.c
 C_SRCS += freertos/queue.c
 C_SRCS += freertos/tasks.c
 C_SRCS += freertos/timers.c
+C_SRCS += main.c
 CXX_SRCS :=
 ASM_SRCS := freertos/port_asm.S
 
