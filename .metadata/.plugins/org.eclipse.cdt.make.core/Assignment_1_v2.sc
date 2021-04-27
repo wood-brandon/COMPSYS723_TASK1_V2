@@ -4,6 +4,9 @@
 <scannerInfo id="org.eclipse.cdt.make.core.discoveredScannerInfo">
 <instance id="preference.org.eclipse.cdt.managedbuilder.core.configurationDataProvider.1439637490;preference.org.eclipse.cdt.managedbuilder.core.configurationDataProvider.1439637490.;cdt.managedbuild.tool.gnu.cpp.compiler.cygwin.base.781035775;cdt.managedbuild.tool.gnu.cpp.compiler.input.cygwin.643759643">
 <collector id="org.eclipse.cdt.make.core.PerProjectSICollector">
+<includePath path="C:/Users/Admin/Documents/COMPSYS723/Assignment1/COMPSYS723_TASK1_V2/Assignment_1_v2_bsp/HAL/inc"/>
+<includePath path="C:/Users/Admin/Documents/COMPSYS723/Assignment1/COMPSYS723_TASK1_V2/Assignment_1_v2_bsp/"/>
+<includePath path="C:/Users/Admin/Documents/COMPSYS723/Assignment1/COMPSYS723_TASK1_V2/Assignment_1_v2_bsp/drivers/inc"/>
 <includePath path="C:/Users/nzbra/OneDrive/Desktop/723/good_ass1/Assignment1_V2/software/Assignment_1_v2_bsp/HAL/inc"/>
 <includePath path="C:/Users/nzbra/OneDrive/Desktop/723/good_ass1/Assignment1_V2/software/Assignment_1_v2_bsp/"/>
 <includePath path="C:/Users/nzbra/OneDrive/Desktop/723/good_ass1/Assignment1_V2/software/Assignment_1_v2_bsp/drivers/inc"/>
@@ -232,6 +235,9 @@
 </instance>
 <instance id="preference.org.eclipse.cdt.managedbuilder.core.configurationDataProvider.1439637490;preference.org.eclipse.cdt.managedbuilder.core.configurationDataProvider.1439637490.;cdt.managedbuild.tool.gnu.c.compiler.cygwin.base.1696402672;cdt.managedbuild.tool.gnu.c.compiler.input.cygwin.1142508757">
 <collector id="org.eclipse.cdt.make.core.PerProjectSICollector">
+<includePath path="C:/Users/Admin/Documents/COMPSYS723/Assignment1/COMPSYS723_TASK1_V2/Assignment_1_v2_bsp/HAL/inc"/>
+<includePath path="C:/Users/Admin/Documents/COMPSYS723/Assignment1/COMPSYS723_TASK1_V2/Assignment_1_v2_bsp/"/>
+<includePath path="C:/Users/Admin/Documents/COMPSYS723/Assignment1/COMPSYS723_TASK1_V2/Assignment_1_v2_bsp/drivers/inc"/>
 <includePath path="C:/Users/nzbra/OneDrive/Desktop/723/good_ass1/Assignment1_V2/software/Assignment_1_v2_bsp/HAL/inc"/>
 <includePath path="C:/Users/nzbra/OneDrive/Desktop/723/good_ass1/Assignment1_V2/software/Assignment_1_v2_bsp/"/>
 <includePath path="C:/Users/nzbra/OneDrive/Desktop/723/good_ass1/Assignment1_V2/software/Assignment_1_v2_bsp/drivers/inc"/>
