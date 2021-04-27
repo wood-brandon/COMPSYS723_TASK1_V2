@@ -12,18 +12,20 @@
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
 #include "freertos/timers.h"
+#include "io.h"
 #include "alt_types.h"
 #include "sys/alt_irq.h"
-#include "io.h"
+#include <sys/alt_timestamp.h>
+
 #include "altera_up_avalon_ps2.h"
 #include "altera_up_ps2_keyboard.h"
-#include "sys/alt_irq.h"
-
+#include <altera_avalon_timer.h>
 #include <altera_avalon_pio_regs.h>
 
 // Definition of Task Stacks
 #define   TASK_STACKSIZE       2048
 //freqarray size could be moved to global.h file???
+#define ALT_CLK_TO_MS 100
 #define FREQ_ARRAY_SIZE 50
 #define PS2_KEY_DOWN 114
 #define PS2_KEY_UP 117
@@ -65,13 +67,17 @@ int ps2_buffer_index = 0;
 int GREEN_LED = 0;
 int RED_LED = 0;
 
+long reaction_measures[5] = { 0 };
+long max_reaction = 0;
+long min_reaction = 0;
+
 float ROCThreshold = ROC_DEFAULT;
 float freqValues[FREQ_ARRAY_SIZE] = {0};
 float freqROCValues[FREQ_ARRAY_SIZE] = {0};
 
 bool loadshedding = false;
 bool managementState = false;
-bool MaintenanceState = false;
+bool disable_shed = false;
 bool System_Stable = true;
 bool first_shed = false;
 
@@ -82,24 +88,26 @@ int initOSDataStructs(void);
 int initCreateTasks(void);
 void initDevices(void);
 void LoadDisconnect(void);
+void LoadReconnect(const char*);
+void SaveMeasurement(long);
 
 // ----------Interrupt service routines
 void NewFreqISR(){
 
     #define SAMPLING_FREQUENCY 16000.0
 	double freq = SAMPLING_FREQUENCY/(double)IORD(FREQUENCY_ANALYSER_BASE, 0);
-
 	xQueueSendToBackFromISR(frequencyQ, &freq, pdFALSE);
 	//printf("Exiting ISR\n");
 	return;
 }
 void PushButtonISR(){
-//	printf("button isr");
-
-	MaintenanceState = !MaintenanceState;
+	managementState = !managementState;
+	if (managementState){
+		disable_shed = true;
+		loadshedding = false;
+	}
 	IOWR_ALTERA_AVALON_PIO_EDGE_CAP(PUSH_BUTTON_BASE, 0x7);
-	//LoadDisconnect();
-
+	xQueueSendFromISR(LoadQueue,0, 0);
 }
 
 // TODO ROC threshold semaphore
@@ -116,7 +124,8 @@ void KeyboardISR(void* context, alt_u32 id)
     // print out the result
 	switch(key){
 	case PS2_KEY_DOWN:
-		ROCThreshold -= ROC_STEP;
+		if (ROCThreshold > 0)
+			ROCThreshold -= ROC_STEP;
 		break;
 	case PS2_KEY_UP:
 		ROCThreshold += ROC_STEP;
@@ -125,7 +134,7 @@ void KeyboardISR(void* context, alt_u32 id)
 		ROCThreshold = ROC_DEFAULT;
 		break;
 	}
-	printf("ROCThreshold = %f",ROCThreshold);
+	printf("ROCThreshold = %f\n",ROCThreshold);
   }
 }
 void SwitchPollingTask(void *pvParameters)
@@ -133,13 +142,12 @@ void SwitchPollingTask(void *pvParameters)
 	int sw_result;
 	int i;
 	unsigned int change = 0;
-	for(i = 0; i<NUM_LOADS; i++){
-		LoadStates[i] = 1;
-	}
+//	for(i = 0; i<NUM_LOADS; i++){
+//		LoadStates[i] = 1;
+//	}
 
 	while (1)
 	{
-//		printf("debug tick %d\n",xTaskGetTickCount());
 //		printf("switchpolling\n");
 		bool j[NUM_LOADS];
 		// Read load values from switch
@@ -153,7 +161,7 @@ void SwitchPollingTask(void *pvParameters)
 
 		//if load shedding
 		xSemaphoreTake(sys_status_flag, portMAX_DELAY);	//TODO FIX SEMAPHORE
-		if(loadshedding){
+		if(loadshedding && !managementState){
 			for(i = 0; i<NUM_LOADS; i++){
 				//only turn off loads
 				if (j[i] == 0){
@@ -163,10 +171,8 @@ void SwitchPollingTask(void *pvParameters)
 				}
 			}
 		}else{
-//			printf("*******SWPOLLING LOADSHED = FALSE");
 			for(i = 0; i<NUM_LOADS; i++){
 				if (LoadStates[i] == 2){
-//					printf("oopsie woopsie");
 				}
 				//otherwise do what you want
 				LoadStates[i] = (int)(j[i]);
@@ -174,7 +180,6 @@ void SwitchPollingTask(void *pvParameters)
 		}
 
 		xSemaphoreGive(sys_status_flag);
-
 
 		xQueueSend(LoadQueue,(void*)&change, 0);
 		vTaskDelay(100);
@@ -188,6 +193,7 @@ void VGATask(void *pvParameters)
 {
 	while (1)
 	{
+		// total system uptime can be got by calling xTaskGetTickCount(), tick count (ms) since start
 		vTaskDelay(1000);
 
 	}
@@ -202,7 +208,6 @@ void StabilityMonitorTask(void *pvParameters)
 	double freq;
 	//index used to check freqValues and freqROCValues for unstability
 	int index;
-	int i;
 	unsigned int change = 0;
 	while (1)
 	{
@@ -226,12 +231,13 @@ void StabilityMonitorTask(void *pvParameters)
 			}else{
 				index = freq_index -1;
 			}
+			
 //			printf("Frequency = %f, ROC = %f\n", freqValues[index],freqROCValues[index]);
 			if(!managementState){
 
-				if(freqValues[index] < freqThreshold || fabs(freqROCValues[index]) > ROCThreshold)
+				if(freqValues[index] < freqThreshold || fabs(freqROCValues[index]) >= ROCThreshold)
 				{
-					// SYSTEM UNSTABLE!
+					//-------------------------------------------------------------------------------SYSTEM UNSTABLE!
 					if (System_Stable){
 						System_Stable = false; // TODO SEMAPHORE :)
 						xTimerStart(unstable_timer,0);
@@ -241,53 +247,42 @@ void StabilityMonitorTask(void *pvParameters)
 
 					if(!loadshedding)
 					{
-						printf("immediate load shed required at = %d\n", xTaskGetTickCount());
-//						printf("unstable\n");
-
-						//set loadshedding state to true
+						printf("loadshedding with sys stable = %d\n", System_Stable);
+						// time initial load shedding
+						alt_timestamp_start();
 						loadshedding = true;
-
-						//copy the current state of the loads to update array and immediately shed a load
-//						for(i = 0; i < NUM_LOADS; i++)
-//						{
-//							xSemaphoreTake(sys_status_flag, portMAX_DELAY);
-//							LoadStatesUpdate[i] = LoadStates[i];
-//
-//							xSemaphoreGive(sys_status_flag);
-//						}
 
 						//shed first low priority load
 						first_shed = true;
 						LoadDisconnect();
 						xQueueSend(LoadQueue,(void*)&change, 0);
 						// Start 500ms timer
+						xTimerStart(unstable_timer, 0);
 					}
 
 				}
 				else{
-					// SYSTEM STABLE!!
+					//-------------------------------------------------------------------------------SYSTEM STABLE!!
 					if (!System_Stable)
 					{
 						System_Stable = true; // TODO SEMAPHORE
 						xTimerStart(unstable_timer,0);
 					}
-//					printf("SWITCHED TO STABLE\n");
 
-//					printf("Stable\n");
-
-					bool any_twos = false;
+					/*bool check_shedding = false;
 
 					for (i =0;i<NUM_LOADS;i++){
 						xSemaphoreTake(sys_status_flag, portMAX_DELAY);
 						if (LoadStates[i] == 2){
-							any_twos = true;
+							check_shedding = true;
 						}
 						xSemaphoreGive(sys_status_flag);
 
 					}
-					if (!any_twos){
+					if (!check_shedding){
 						loadshedding = false;
-					}
+						xTimerStop(unstable_timer,0);
+					}*/
 
 				}
 
@@ -312,10 +307,11 @@ void LoadDisconnect(){
 			xSemaphoreGive(sys_status_flag);
 			return;
 		}
+
 	}
 }
 
-void LoadReconnect(){
+void LoadReconnect(const char *ReconnectType){
 	int i;
 //	printf("begin reconnect *******************");
 	for(i=(NUM_LOADS-1); i>=0; i--)
@@ -327,11 +323,16 @@ void LoadReconnect(){
 //			printf("Disconnected load %d",i);
 			LoadStates[i] = 1;
 			xSemaphoreGive(sys_status_flag);
-			return;
+			// if arg was single reconnect, stop after one has been enabled
+			if (!strcmp(ReconnectType,"Single")){
+				return;
+			}
 		}
-//		printf("**********LOADSHED FALSE");
-		//loadshedding = false; // TODO semaphore;
+
 	}
+	// if arg was single reconnect, all loads are connected
+	if (!strcmp(ReconnectType, "Single"))
+		loadshedding = false; // TODO semaphore;
 }
 
 // This task manages the loads turning them on and off based on the data in loadQ. If the system becomes
@@ -341,36 +342,50 @@ void LoadControlTask(void *pvParameters)
 {
 	unsigned int change;
 	int i = 0;
+	long time = 0;
 	while (1)
 	{
-//		printf("loadctrl\n");
-		if (xQueueReceive(LoadQueue, &change, portMAX_DELAY)==pdTRUE);
-		GREEN_LED = 0;
-		RED_LED = 0;
-		for (i = 0;i<NUM_LOADS;i++){
-//			printf("loadstates[%d] = %d",i,LoadStates[i]);
-			switch(LoadStates[i]){
-			case(1):
-				RED_LED += (1 << i);
-				break;
-			case(2):
-				GREEN_LED += (1 << i);
-				break;
-			default:
-				break;
+		//printf("loadctrl\n");
+		if (xQueueReceive(LoadQueue, &change, portMAX_DELAY)==pdTRUE){
+			GREEN_LED = 0;
+			RED_LED = 0;
+
+			// handle disabl
+			if (disable_shed){
+				LoadReconnect("All");
+				disable_shed = false;
 			}
 
+			for (i = 0;i<NUM_LOADS;i++){
+	//			printf("loadstates[%d] = %d",i,LoadStates[i]);
+				switch(LoadStates[i]){
+				case(1):
+					RED_LED += (1 << i);
+					break;
+				case(2):
+					GREEN_LED += (1 << i);
+					break;
+				default:
+					break;
+				}
+
+			}
 		}
+
 //		printf("red leds = %d, green leds = %d\n",RED_LED,GREEN_LED);
 		IOWR_ALTERA_AVALON_PIO_DATA(RED_LEDS_BASE, RED_LED);
 		IOWR_ALTERA_AVALON_PIO_DATA(GREEN_LEDS_BASE, GREEN_LED);
+
+		// evaluate timing constraints
 		if (first_shed){
-			printf("first load shed at tick = %d\n", xTaskGetTickCount());
+			time = (long)(alt_timestamp())/ALT_CLK_TO_MS;
+			printf("time between unstable and load shed = %ldms\n",time);
+			SaveMeasurement(time);
 			first_shed = false;
 		}
 
 
-
+		vTaskDelay(10);
 	}
 }
 
@@ -392,17 +407,57 @@ void DebugTask(void *pvParameters)
 	}
 }
 
+void SaveMeasurement(long newMeasure) {
+	int i;
+	float average = 0;
+	static bool init = false;
+	
+	printf("passed %ld\n", newMeasure);
+	
+	for (i = 4; i > 0; i--) {
+		reaction_measures[i] = reaction_measures[i-1];
+		average += reaction_measures[i];
+	}
+	reaction_measures[0] = newMeasure;
+	average += reaction_measures[0];
+	average = average / 5;
+
+	if (init) {
+		if (newMeasure > max_reaction)
+			max_reaction = newMeasure;
+
+		if (newMeasure < min_reaction)
+			min_reaction = newMeasure;
+	}
+	else {
+		max_reaction = newMeasure;
+		min_reaction = newMeasure;
+		init = true;
+	}
+
+	printf("------------------SAVEMEASUREMENT VALUES--------------\n");
+	for (i = 4; i >= 0; i--) {
+		printf("measure[%d] = %ldms\n", i, reaction_measures[i]);
+	}
+	printf("max reaction = %ld, min reaction = %ld average = %f\n", max_reaction, min_reaction, average);
+	printf("------------------END SAVEMEASUREMENT VALUES--------------\n");
+
+}
+
 // 500MS TIMER FUNC
 void vTimerCallback(TimerHandle_t timer){
 	unsigned int *change = 0;
 	// toggle another load
-	if (!System_Stable){
-		LoadDisconnect();
+	if (!managementState){
+		if (!System_Stable){
+			LoadDisconnect();
+		}
+		else{
+			LoadReconnect("Single");
+		}
+		xQueueSend(LoadQueue,(void*)&change, 0);
 	}
-	else{
-		LoadReconnect();
-	}
-	xQueueSend(LoadQueue,(void*)&change, 0);
+
 
 	// does timer need to be restarted
 }
