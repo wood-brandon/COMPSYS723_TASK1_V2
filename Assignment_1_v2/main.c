@@ -87,6 +87,7 @@ int RED_LED = 0;
 long reaction_measures[5] = { 0 };
 long max_reaction = 0;
 long min_reaction = 0;
+float average_reaction = 0;
 
 float ROCThreshold = ROC_DEFAULT;
 float freqValues[FREQ_ARRAY_SIZE] = {0};
@@ -111,6 +112,8 @@ void initDevices(void);
 void LoadDisconnect(void);
 void LoadReconnect(const char*);
 void SaveMeasurement(long);
+void drawBackground(void);
+void drawGraphs(float*, float*, int);
 
 // ----------Interrupt service routines
 void NewFreqISR(){
@@ -237,10 +240,10 @@ void VGATask(void *pvParameters)
 	}
 }
 
-void drawGraphs(float* freq_valus, float* roc_values, int i){
+void drawGraphs(float* freq, float* ROCfreq, int i){
 
-	float freq[50];
-	float ROCfreq[50];
+	//float freq[50];
+	//float ROCfreq[50];
 	int j;
 
 	typedef struct{
@@ -336,7 +339,7 @@ void StabilityMonitorTask(void *pvParameters)
 			}else{
 				index = freq_index -1;
 			}
-			
+
 //			printf("Frequency = %f, ROC = %f\n", freqValues[index],freqROCValues[index]);
 			if(!managementState){
 
@@ -477,6 +480,9 @@ void LoadControlTask(void *pvParameters)
 			}
 		}
 
+		if (GREEN_LED == 0)
+			loadshedding = false;
+
 //		printf("red leds = %d, green leds = %d\n",RED_LED,GREEN_LED);
 		IOWR_ALTERA_AVALON_PIO_DATA(RED_LEDS_BASE, RED_LED);
 		IOWR_ALTERA_AVALON_PIO_DATA(GREEN_LEDS_BASE, GREEN_LED);
@@ -514,18 +520,17 @@ void DebugTask(void *pvParameters)
 
 void SaveMeasurement(long newMeasure) {
 	int i;
-	float average = 0;
 	static bool init = false;
-	
+
 	printf("passed %ld\n", newMeasure);
-	
+
 	for (i = 4; i > 0; i--) {
 		reaction_measures[i] = reaction_measures[i-1];
-		average += reaction_measures[i];
+		average_reaction += reaction_measures[i];
 	}
 	reaction_measures[0] = newMeasure;
-	average += reaction_measures[0];
-	average = average / 5;
+	average_reaction += reaction_measures[0];
+	average_reaction = average_reaction / 5;
 
 	if (init) {
 		if (newMeasure > max_reaction)
@@ -544,7 +549,7 @@ void SaveMeasurement(long newMeasure) {
 	for (i = 4; i >= 0; i--) {
 		printf("measure[%d] = %ldms\n", i, reaction_measures[i]);
 	}
-	printf("max reaction = %ld, min reaction = %ld average = %f\n", max_reaction, min_reaction, average);
+	printf("max reaction = %ld, min reaction = %ld average = %f\n", max_reaction, min_reaction, average_reaction);
 	printf("------------------END SAVEMEASUREMENT VALUES--------------\n");
 
 }
@@ -636,7 +641,7 @@ int initOSDataStructs(void)
 // This function creates the tasks used in this example
 int initCreateTasks(void)
 {
-	//xTaskCreate(VGATask, "VGATask", TASK_STACKSIZE, NULL, VGA_PRIORITY, NULL);
+	xTaskCreate(VGATask, "VGATask", TASK_STACKSIZE, NULL, VGA_PRIORITY, NULL);
 	xTaskCreate(StabilityMonitorTask, "StabilityMonitorTask", TASK_STACKSIZE, NULL, STABILITY_PRIORITY, NULL);
 	xTaskCreate(LoadControlTask, "LoadControlTask", TASK_STACKSIZE, NULL, LOAD_PRIORITY, NULL);
 	xTaskCreate(SwitchPollingTask, "SwitchPollingTask", TASK_STACKSIZE, NULL, SWITCH_PRIORITY, NULL);
