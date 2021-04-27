@@ -29,7 +29,7 @@
 #define PS2_KEY_UP 117
 #define PS2_KEY_ESC 118
 #define ROC_STEP 0.5
-#define ROC_DEFAULT 555
+#define ROC_DEFAULT 5
 
 // Definition of Task Priorities
 #define VGA_PRIORITY 			1
@@ -49,6 +49,7 @@ QueueHandle_t frequencyQ;
 TaskHandle_t xHandle;
 
 TimerHandle_t unstable_timer;
+TimerHandle_t reaction_timer;
 
 // Definition of Semaphore
 xSemaphoreHandle sys_status_flag;
@@ -59,7 +60,7 @@ SemaphoreHandle_t shared_resource_sem;
 int LoadStates[NUM_LOADS];
 int LoadStatesUpdate[NUM_LOADS];
 int freq_index = 0;
-float freqThreshold = 60;
+float freqThreshold = 48.3;
 int ps2_buffer_index = 0;
 int GREEN_LED = 0;
 int RED_LED = 0;
@@ -72,6 +73,7 @@ bool loadshedding = false;
 bool managementState = false;
 bool MaintenanceState = false;
 bool System_Stable = true;
+bool first_shed = false;
 
 char Threshold_Input_Buffer[3];
 
@@ -100,6 +102,7 @@ void PushButtonISR(){
 
 }
 
+// TODO ROC threshold semaphore
 void KeyboardISR(void* context, alt_u32 id)
 {
   char ascii;
@@ -122,6 +125,7 @@ void KeyboardISR(void* context, alt_u32 id)
 		ROCThreshold = ROC_DEFAULT;
 		break;
 	}
+	printf("ROCThreshold = %f",ROCThreshold);
   }
 }
 void SwitchPollingTask(void *pvParameters)
@@ -135,6 +139,7 @@ void SwitchPollingTask(void *pvParameters)
 
 	while (1)
 	{
+//		printf("debug tick %d\n",xTaskGetTickCount());
 //		printf("switchpolling\n");
 		bool j[NUM_LOADS];
 		// Read load values from switch
@@ -161,7 +166,7 @@ void SwitchPollingTask(void *pvParameters)
 //			printf("*******SWPOLLING LOADSHED = FALSE");
 			for(i = 0; i<NUM_LOADS; i++){
 				if (LoadStates[i] == 2){
-					printf("oopsie woopsie");
+//					printf("oopsie woopsie");
 				}
 				//otherwise do what you want
 				LoadStates[i] = (int)(j[i]);
@@ -198,6 +203,7 @@ void StabilityMonitorTask(void *pvParameters)
 	//index used to check freqValues and freqROCValues for unstability
 	int index;
 	int i;
+	unsigned int change = 0;
 	while (1)
 	{
 //		printf("stability\n");
@@ -220,37 +226,40 @@ void StabilityMonitorTask(void *pvParameters)
 			}else{
 				index = freq_index -1;
 			}
-			printf("Frequency = %f, ROC = %f\n", freqValues[index],freqROCValues[index]);
+//			printf("Frequency = %f, ROC = %f\n", freqValues[index],freqROCValues[index]);
 			if(!managementState){
 
 				if(freqValues[index] < freqThreshold || fabs(freqROCValues[index]) > ROCThreshold)
 				{
 					// SYSTEM UNSTABLE!
 					if (System_Stable){
-
+						System_Stable = false; // TODO SEMAPHORE :)
 						xTimerStart(unstable_timer,0);
 					}
-					System_Stable = false; // TODO SEMAPHORE :)
+
 //					printf("SWITCHED TO UNSTABLE\n");
 
 					if(!loadshedding)
 					{
+						printf("immediate load shed required at = %d\n", xTaskGetTickCount());
 //						printf("unstable\n");
 
 						//set loadshedding state to true
 						loadshedding = true;
 
 						//copy the current state of the loads to update array and immediately shed a load
-						for(i = 0; i < NUM_LOADS; i++)
-						{
-							xSemaphoreTake(sys_status_flag, portMAX_DELAY);
-							LoadStatesUpdate[i] = LoadStates[i];
-
-							xSemaphoreGive(sys_status_flag);
-						}
+//						for(i = 0; i < NUM_LOADS; i++)
+//						{
+//							xSemaphoreTake(sys_status_flag, portMAX_DELAY);
+//							LoadStatesUpdate[i] = LoadStates[i];
+//
+//							xSemaphoreGive(sys_status_flag);
+//						}
 
 						//shed first low priority load
-						//LoadDisconnect();
+						first_shed = true;
+						LoadDisconnect();
+						xQueueSend(LoadQueue,(void*)&change, 0);
 						// Start 500ms timer
 					}
 
@@ -259,12 +268,15 @@ void StabilityMonitorTask(void *pvParameters)
 					// SYSTEM STABLE!!
 					if (!System_Stable)
 					{
+						System_Stable = true; // TODO SEMAPHORE
 						xTimerStart(unstable_timer,0);
 					}
 //					printf("SWITCHED TO STABLE\n");
-					System_Stable = true; // TODO SEMAPHORE
+
 //					printf("Stable\n");
+
 					bool any_twos = false;
+
 					for (i =0;i<NUM_LOADS;i++){
 						xSemaphoreTake(sys_status_flag, portMAX_DELAY);
 						if (LoadStates[i] == 2){
@@ -329,12 +341,10 @@ void LoadControlTask(void *pvParameters)
 {
 	unsigned int change;
 	int i = 0;
-
-
 	while (1)
 	{
 //		printf("loadctrl\n");
-		xQueueReceive(LoadQueue, &change, portMAX_DELAY);
+		if (xQueueReceive(LoadQueue, &change, portMAX_DELAY)==pdTRUE);
 		GREEN_LED = 0;
 		RED_LED = 0;
 		for (i = 0;i<NUM_LOADS;i++){
@@ -354,6 +364,11 @@ void LoadControlTask(void *pvParameters)
 //		printf("red leds = %d, green leds = %d\n",RED_LED,GREEN_LED);
 		IOWR_ALTERA_AVALON_PIO_DATA(RED_LEDS_BASE, RED_LED);
 		IOWR_ALTERA_AVALON_PIO_DATA(GREEN_LEDS_BASE, GREEN_LED);
+		if (first_shed){
+			printf("first load shed at tick = %d\n", xTaskGetTickCount());
+			first_shed = false;
+		}
+
 
 
 	}
@@ -380,7 +395,6 @@ void DebugTask(void *pvParameters)
 // 500MS TIMER FUNC
 void vTimerCallback(TimerHandle_t timer){
 	unsigned int *change = 0;
-//	printf("BASED DEPARTMENT??? \n");
 	// toggle another load
 	if (!System_Stable){
 		LoadDisconnect();
@@ -421,7 +435,7 @@ int initOSDataStructs(void)
 	LoadQueue = xQueueCreate(MSG_QUEUE_SIZE, sizeof(float));
 	frequencyQ = xQueueCreate(MSG_QUEUE_SIZE, sizeof(double));
 
-	// ISR
+	// ISRS
 	IOWR_ALTERA_AVALON_PIO_EDGE_CAP(PUSH_BUTTON_BASE, 0x7);
 	IOWR_ALTERA_AVALON_PIO_IRQ_MASK(PUSH_BUTTON_BASE, 0x1); // mask interrupt for button 1
 	alt_irq_register(PUSH_BUTTON_IRQ, NULL, PushButtonISR);
@@ -430,7 +444,10 @@ int initOSDataStructs(void)
 	// TIMER
 
 	unstable_timer = xTimerCreate("Timer", (pdMS_TO_TICKS(1000)),pdTRUE,(void *)0,vTimerCallback);
+	//reaction_timer = xTimerCreate("Timer1",(pdMS_TO_TICKS(200)),pdFALSE,(void *)0,vTimerTooLong);
+
 	xTimerStart(unstable_timer,0);
+	//xTimerStart(reaction_timer,0);
 
 	// SEMAPHORE
 	sys_status_flag = xSemaphoreCreateMutex();
