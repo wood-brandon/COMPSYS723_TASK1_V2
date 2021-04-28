@@ -34,6 +34,8 @@
 
 #define PS2_KEY_DOWN 114
 #define PS2_KEY_UP 117
+#define PS2_KEY_LEFT 107
+#define PS2_KEY_RIGHT 116
 #define PS2_KEY_ESC 118
 
 
@@ -139,6 +141,7 @@ void PushButtonISR(){
 	if (managementState){
 		disable_shed = true;
 		loadshedding = false;
+		xTimerStopFromISR(unstable_timer,0);
 	}
 	IOWR_ALTERA_AVALON_PIO_EDGE_CAP(PUSH_BUTTON_BASE, 0x7);
 	xQueueSendFromISR(LoadQueue,0, 0);
@@ -153,26 +156,32 @@ void KeyboardISR(void* context, alt_u32 id)
   unsigned char key = 0;
   static bool prevent_double_trigger = false;
   KB_CODE_TYPE decode_mode;
-
   status = decode_scancode (context, &decode_mode , &key , &ascii) ;
   if ( status == 0 ) //success
   {
-	if(prevent_double_trigger){
-		switch(key){
-		case PS2_KEY_DOWN:
-			if (ROCThreshold > 0)
-				ROCThreshold -= ROC_STEP;
-			break;
-		case PS2_KEY_UP:
-			ROCThreshold += ROC_STEP;
-			break;
-		case PS2_KEY_ESC:
-			ROCThreshold = ROC_DEFAULT;
-			break;
-		}
+	  if (prevent_double_trigger) {
+		  switch (key) {
+		  case PS2_KEY_DOWN:
+			  if (ROCThreshold > 0)
+				  ROCThreshold -= ROC_STEP;
+			  break;
+		  case PS2_KEY_UP:
+			  ROCThreshold += ROC_STEP;
+			  break;
+		  case PS2_KEY_RIGHT:
+			  freqThreshold += FREQ_STEP;
+			  break;
+		  case PS2_KEY_LEFT:
+			  if (freqThreshold > 0)
+				  freqThreshold -= FREQ_STEP;
+			  break;
+		  case PS2_KEY_ESC:
+			  freqThreshold = FREQ_THRESHOLD;
+			  ROCThreshold = ROC_DEFAULT;
+			  break;
+		  }
+	  }
 	}
-	printf("ROCThreshold = %f\n",ROCThreshold);
-  }
 
   prevent_double_trigger = !prevent_double_trigger;
 }
@@ -295,7 +304,7 @@ void drawGraphs(float* freq, float* ROCfreq, int i){
 			alt_up_pixel_buffer_dma_draw_line(pixel_buf, line_roc.x1, line_roc.y1, line_roc.x2, line_roc.y2, 0x3ff << 0, 0);
 		}
 	}
-	vTaskDelay(10);
+	vTaskDelay(SHORT_DELAY);
 
 }
 
@@ -365,8 +374,6 @@ void drawUptime(int seconds){
 	int hoursConversion = 60*60;
 	int minutesConversion = 60;
 
-
-
 	days = seconds/daysConversion;
 	seconds = seconds - (days*daysConversion);
 	hours = seconds/hoursConversion;
@@ -405,7 +412,7 @@ void StabilityMonitorTask(void *pvParameters)
 			}else{
 				index = freq_index -1;
 			}
-
+			//printf("Frequency = %f, ROC = %f\n", freqValues[index], freqROCValues[index]);
 			if(!managementState){
 
 				if(freqValues[index] < freqThreshold || fabs(freqROCValues[index]) >= ROCThreshold)
@@ -426,20 +433,18 @@ void StabilityMonitorTask(void *pvParameters)
 						//shed first low priority load
 						LoadDisconnect();
 						xQueueSend(LoadQueue,(void*)&change, 0);
+						xTimerStart(unstable_timer, 0);
 					}
-				}
-				else
-				{
+				}else{
 					//-------------------------------------------------------------------------------SYSTEM STABLE!!
-					if (!System_Stable)
-					{
+					if (!System_Stable) {
 						System_Stable = true; // TODO SEMAPHORE
 						xTimerStart(unstable_timer,0);
 					}
 				}
 	    	}
 	    }
-	    vTaskDelay(SHORT_DELAY);
+	    vTaskDelay(100);
 	}
 }
 
@@ -448,9 +453,9 @@ void LoadDisconnect(){
 	xSemaphoreTake(sys_status_flag, portMAX_DELAY);
 	for(i=0; i<NUM_LOADS; i++ )
 	{
-		if(LoadStates[i] == 1)
+		if(LoadStates[i] == LOAD_STATE_ON)
 		{
-			LoadStates[i] = 2;
+			LoadStates[i] = LOAD_STATE_MANAGED;
 			xSemaphoreGive(sys_status_flag);
 			return;
 		}
@@ -464,9 +469,9 @@ void LoadReconnect(const char *ReconnectType){
 	xSemaphoreTake(sys_status_flag, portMAX_DELAY);
 	for(i=(NUM_LOADS-1); i>=0; i--)
 	{
-		if(LoadStates[i] == 2)
+		if(LoadStates[i] == LOAD_STATE_MANAGED)
 		{
-			LoadStates[i] = 1;
+			LoadStates[i] = LOAD_STATE_ON;
 			// if arg was single reconnect, stop after one has been enabled
 			if (!strcmp(ReconnectType,"Single")){
 				xSemaphoreGive(sys_status_flag);
@@ -477,8 +482,10 @@ void LoadReconnect(const char *ReconnectType){
 	}
 	xSemaphoreGive(sys_status_flag);
 	// if arg was single reconnect, all loads are connected
-	if (!strcmp(ReconnectType, "Single"))
+	if (!strcmp(ReconnectType, "Single")) {
 		loadshedding = false; // TODO semaphore;
+		xTimerStop(unstable_timer, 0);
+	}
 }
 
 // This task manages the loads turning them on and off based on the data in loadQ. If the system becomes
@@ -503,10 +510,10 @@ void LoadControlTask(void *pvParameters)
 
 			for (i = 0;i<NUM_LOADS;i++){
 				switch(LoadStates[i]){
-				case(1):
+				case(LOAD_STATE_ON):
 					RED_LED += (1 << i);
 					break;
-				case(2):
+				case(LOAD_STATE_MANAGED):
 					GREEN_LED += (1 << i);
 					break;
 				default:
@@ -518,6 +525,7 @@ void LoadControlTask(void *pvParameters)
 
 		if (GREEN_LED == 0){
 			loadshedding = false;
+			xTimerStop(unstable_timer, 0);
 		}
 
 		IOWR_ALTERA_AVALON_PIO_DATA(RED_LEDS_BASE, RED_LED);
@@ -527,7 +535,7 @@ void LoadControlTask(void *pvParameters)
 		if (first_shed){
 			first_shed = false;
 			time = (double)(alt_timestamp())/ALT_CLK_TO_MS;
-			printf("time between unstable and load shed = %fms\n",time);
+			//printf("time between unstable and load shed = %fms\n",time);
 			SaveMeasurement(time);
 
 			// Start 500ms timer
@@ -640,8 +648,7 @@ int initOSDataStructs(void)
 	alt_irq_register(FREQUENCY_ANALYSER_IRQ, 0, NewFreqISR);
 
 	// TIMER
-	unstable_timer = xTimerCreate("Timer", (pdMS_TO_TICKS(1000)),pdTRUE,(void *)0,vTimerCallback);
-	xTimerStart(unstable_timer,0);
+	unstable_timer = xTimerCreate("Timer", (pdMS_TO_TICKS(STABILITY_DELAY_MS)),pdTRUE,(void *)0,vTimerCallback);
 
 	// SEMAPHORE
 	sys_status_flag = xSemaphoreCreateMutex();
