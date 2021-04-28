@@ -1,4 +1,4 @@
-// Standard includes
+// Standard includes test
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
@@ -15,27 +15,27 @@
 #include "io.h"
 #include "alt_types.h"
 #include "sys/alt_irq.h"
-#include <sys/alt_timestamp.h>
+#include "sys/alt_timestamp.h"
+#include "sys/alt_irq.h"
 
 #include "altera_up_avalon_ps2.h"
 #include "altera_up_ps2_keyboard.h"
-#include "sys/alt_irq.h"
 #include "altera_up_avalon_video_character_buffer_with_dma.h"
 #include "altera_up_avalon_video_pixel_buffer_dma.h"
-
 #include <altera_avalon_timer.h>
 #include <altera_avalon_pio_regs.h>
 
-// Definition of Task Stacks
-#define   TASK_STACKSIZE       2048
-//freqarray size could be moved to global.h file???
-#define ALT_CLK_TO_MS 100
+#include "global.h"
+
+#define TASK_STACKSIZE  2048
 #define FREQ_ARRAY_SIZE 50
+#define MSG_QUEUE_SIZE  30
+#define ALT_CLK_TO_MS 100
+
 #define PS2_KEY_DOWN 114
 #define PS2_KEY_UP 117
 #define PS2_KEY_ESC 118
-#define ROC_STEP 0.5
-#define ROC_DEFAULT 5
+
 
 //VGA variable definitions
 #define FREQPLT_ORI_X 101		//x axis pixel position at the plot origin
@@ -54,32 +54,38 @@
 #define VGA_PRIORITY 			1
 #define STABILITY_PRIORITY      6
 #define LOAD_PRIORITY      		4
-#define MANAGE_PRIORITY    		5
 #define SWITCH_PRIORITY    		1
-#define DEBUG_PRIORITY       	0
 
-// Definition of Message Queue
-#define   	MSG_QUEUE_SIZE  30
-#define   	NUM_LOADS 5
+#define SWITCH_DELAY 100
+#define VGA_DELAY 16 // most vga monitors do not support above 60hz so why refresh faster
+#define SHORT_DELAY 10
+
+#define LOAD_STATE_OFF 0
+#define LOAD_STATE_ON 1
+#define LOAD_STATE_MANAGED 2
+
+//-------------------------------------FreeRTOS Structures
+// Queues
 QueueHandle_t LoadQueue;
 QueueHandle_t frequencyQ;
 
-// used to delete a task
+// Tasks
 TaskHandle_t xHandle;
 
+// Timers
 TimerHandle_t unstable_timer;
 TimerHandle_t reaction_timer;
 
-// Definition of Semaphore
+// Semaphore
 xSemaphoreHandle sys_status_flag;
 xSemaphoreHandle management_flag;
 SemaphoreHandle_t shared_resource_sem;
 
-// globals variables
+//-------------------------------------GLOBAL VARIABLES
 int LoadStates[NUM_LOADS];
 int LoadStatesUpdate[NUM_LOADS];
 int freq_index = 0;
-float freqThreshold = 48.3;
+float freqThreshold = FREQ_THRESHOLD;
 int ps2_buffer_index = 0;
 int GREEN_LED = 0;
 int RED_LED = 0;
@@ -89,18 +95,17 @@ long max_reaction = 0;
 long min_reaction = 0;
 float average_reaction = 0;
 char measureBuffer[50];
+char Threshold_Input_Buffer[3];
 
 float ROCThreshold = ROC_DEFAULT;
 float freqValues[FREQ_ARRAY_SIZE] = {0};
 float freqROCValues[FREQ_ARRAY_SIZE] = {0};
 
-bool loadshedding = false;
-bool managementState = false;
-bool disable_shed = false;
 bool System_Stable = true;
+bool loadshedding = false;
 bool first_shed = false;
-
-char Threshold_Input_Buffer[3];
+bool disable_shed = false;
+bool managementState = false;
 
 //VGA global variables
 alt_up_char_buffer_dev *char_buf;
@@ -115,16 +120,20 @@ void LoadReconnect(const char*);
 void SaveMeasurement(long);
 void drawBackground(void);
 void drawGraphs(float*, float*, int);
+void drawReactionTime(float, long, long, long*);
+void drawThresholds(float, float);
+void drawUptime(int);
 
-// ----------Interrupt service routines
+//-------------------------------------Interrupt service routines
+// Handles new frequency data from memory
 void NewFreqISR(){
 
     #define SAMPLING_FREQUENCY 16000.0
 	double freq = SAMPLING_FREQUENCY/(double)IORD(FREQUENCY_ANALYSER_BASE, 0);
 	xQueueSendToBackFromISR(frequencyQ, &freq, pdFALSE);
-	//printf("Exiting ISR\n");
 	return;
 }
+// ISR for maintenance mode button
 void PushButtonISR(){
 	managementState = !managementState;
 	if (managementState){
@@ -136,50 +145,49 @@ void PushButtonISR(){
 }
 
 // TODO ROC threshold semaphore
+// ISR for keyboard: up and down arrows to control ROC, esc to reset to default
 void KeyboardISR(void* context, alt_u32 id)
 {
   char ascii;
   int status = 0;
   unsigned char key = 0;
+  static bool prevent_double_trigger = false;
   KB_CODE_TYPE decode_mode;
+
   status = decode_scancode (context, &decode_mode , &key , &ascii) ;
   if ( status == 0 ) //success
   {
-//	printf("key  = %d",key);
-    // print out the result
-	switch(key){
-	case PS2_KEY_DOWN:
-		if (ROCThreshold > 0)
-			ROCThreshold -= ROC_STEP;
-		break;
-	case PS2_KEY_UP:
-		ROCThreshold += ROC_STEP;
-		break;
-	case PS2_KEY_ESC:
-		ROCThreshold = ROC_DEFAULT;
-		break;
+	if(prevent_double_trigger){
+		switch(key){
+		case PS2_KEY_DOWN:
+			if (ROCThreshold > 0)
+				ROCThreshold -= ROC_STEP;
+			break;
+		case PS2_KEY_UP:
+			ROCThreshold += ROC_STEP;
+			break;
+		case PS2_KEY_ESC:
+			ROCThreshold = ROC_DEFAULT;
+			break;
+		}
 	}
 	printf("ROCThreshold = %f\n",ROCThreshold);
   }
+
+  prevent_double_trigger = !prevent_double_trigger;
 }
+
+// This task continually polls the switches to update 
 void SwitchPollingTask(void *pvParameters)
 {
 	int sw_result;
 	int i;
 	unsigned int change = 0;
-//	for(i = 0; i<NUM_LOADS; i++){
-//		LoadStates[i] = 1;
-//	}
-
 	while (1)
 	{
-//		printf("switchpolling\n");
 		bool j[NUM_LOADS];
-		// Read load values from switch
 		sw_result=IORD_ALTERA_AVALON_PIO_DATA(SLIDE_SWITCH_BASE);
-		sw_result = sw_result & 0x1F;
-//		printf("number is %d\n", sw_result);
-		// Filter and update LoadStatesUpdate
+		sw_result = sw_result & 0x1F; // mask only bottom switches
 		for (i=0; i < NUM_LOADS;i++){
 			j[i] = (bool) (sw_result & (1 << i));
 		}
@@ -189,17 +197,14 @@ void SwitchPollingTask(void *pvParameters)
 		if(loadshedding && !managementState){
 			for(i = 0; i<NUM_LOADS; i++){
 				//only turn off loads
-				if (j[i] == 0){
-//					printf("set load %d to %d",i,j[i]);
-					//LoadStates[i] = (int)(LoadStates[i] && j[i]);
+				if (j[i] == LOAD_STATE_OFF){
 					LoadStates[i] = j[i];
 				}
 			}
 		}else{
 			for(i = 0; i<NUM_LOADS; i++){
-				if (LoadStates[i] == 2){
+				if (LoadStates[i] == LOAD_STATE_MANAGED){
 				}
-				//otherwise do what you want
 				LoadStates[i] = (int)(j[i]);
 			}
 		}
@@ -207,7 +212,7 @@ void SwitchPollingTask(void *pvParameters)
 		xSemaphoreGive(sys_status_flag);
 
 		xQueueSend(LoadQueue,(void*)&change, 0);
-		vTaskDelay(100);
+		vTaskDelay(SWITCH_DELAY);
 	}
 
 
@@ -240,11 +245,10 @@ void VGATask(void *pvParameters)
 		drawBackground();
 		drawGraphs(vga_Freq, vga_ROCFreq, startpos);
 		drawReactionTime(average_reaction, min_reaction, max_reaction, vga_measures);
-		drawThreasholds(freqThreshold, ROCThreshold);
-		drawUpTime(xTaskGetTikCount()/1000);
+		drawThresholds(freqThreshold, ROCThreshold);
+		drawUptime(xTaskGetTickCount()/1000);
 
-		vTaskDelay(10);
-
+		vTaskDelay(VGA_DELAY);
 	}
 }
 
@@ -318,7 +322,7 @@ void drawBackground(){
 
 }
 
-void drawReactionTime(float average, long min, long max, long measures){
+void drawReactionTime(float average, long min, long max, long *measures){
 
 	int i;
 	float minimum = (float)min/1000;
@@ -327,26 +331,28 @@ void drawReactionTime(float average, long min, long max, long measures){
 	float temp;
 
 	// print past 5 timing measurements
-	alt_up_char_buffer_string(char_buf, "TIMING MEASUREMENTS (MS)", 4, 50);
+	alt_up_char_buffer_string(char_buf, "TIMING MEASUREMENTS (S)", 4, 40);
 	for(i = 0; i < 5; i++){
 		temp = (float)measures[i];
 		sprintf(measureBuffer, "%d:  %f", i+1, temp/1000);
-		alt_up_char_buffer_string(char_buf, measureBuffer, 4, 57+i*2);
+		alt_up_char_buffer_string(char_buf, measureBuffer, 4, 42+i*2);
 	}
 
 	sprintf(measureBuffer, "Average: %f", avg);
-	alt_up_char_buffer_string(char_buf, measureBuffer, 4, 57+10);
+	alt_up_char_buffer_string(char_buf, measureBuffer, 4, 42+10);
 	sprintf(measureBuffer, "Minimum: %f", minimum);
-	alt_up_char_buffer_string(char_buf, measureBuffer, 4, 57+12);
+	alt_up_char_buffer_string(char_buf, measureBuffer, 4, 42+12);
 	sprintf(measureBuffer, "Maximum: %f", maximum);
-	alt_up_char_buffer_string(char_buf, measureBuffer, 4, 57+14);
+	alt_up_char_buffer_string(char_buf, measureBuffer, 4, 42+14);
 
 }
 
 void drawThresholds(float freq, float roc){
 
-	sprintf(measureBuffer, "Frequency Threshold:  %f    ROC Threshold:  %f", freq, roc);
-	alt_up_char_buffer_string(char_buf, measureBuffer, 100, 57+10);
+	sprintf(measureBuffer, "Frequency Threshold:  %.2f Hz", freq);
+	alt_up_char_buffer_string(char_buf, measureBuffer, 44, 40);
+	sprintf(measureBuffer, "ROC Threshold:  %.2f Hz/s", roc);
+	alt_up_char_buffer_string(char_buf, measureBuffer, 44, 42);
 
 }
 
@@ -369,23 +375,20 @@ void drawUptime(int seconds){
 	seconds = seconds-(minutes*minutesConversion);
 
 	sprintf(measureBuffer, "System Uptime: %d:%d:%d:%d", days, hours, minutes, seconds);
-	alt_up_char_buffer_string(char_buf, measureBuffer, 50, 57+10);
+	alt_up_char_buffer_string(char_buf, measureBuffer, 44, 44);
 
 }
 
 void StabilityMonitorTask(void *pvParameters)
 {
-
 	double freq;
 	//index used to check freqValues and freqROCValues for unstability
 	int index;
 	unsigned int change = 0;
 	while (1)
 	{
-//		printf("stability\n");
 	    if(xQueueReceive(frequencyQ, &freq, portMAX_DELAY)==pdTRUE)
 	    {
-
 			//add frequencies to array
 			freqValues[freq_index] = freq;
 			//calculation for frequency rate of change
@@ -403,7 +406,6 @@ void StabilityMonitorTask(void *pvParameters)
 				index = freq_index -1;
 			}
 
-//			printf("Frequency = %f, ROC = %f\n", freqValues[index],freqROCValues[index]);
 			if(!managementState){
 
 				if(freqValues[index] < freqThreshold || fabs(freqROCValues[index]) >= ROCThreshold)
@@ -414,93 +416,66 @@ void StabilityMonitorTask(void *pvParameters)
 						xTimerStart(unstable_timer,0);
 					}
 
-//					printf("SWITCHED TO UNSTABLE\n");
-
 					if(!loadshedding)
 					{
-						printf("loadshedding with sys stable = %d\n", System_Stable);
 						// time initial load shedding
 						alt_timestamp_start();
 						loadshedding = true;
+						first_shed = true;
 
 						//shed first low priority load
-						first_shed = true;
 						LoadDisconnect();
 						xQueueSend(LoadQueue,(void*)&change, 0);
-						// Start 500ms timer
-						xTimerStart(unstable_timer, 0);
 					}
-
 				}
-				else{
+				else
+				{
 					//-------------------------------------------------------------------------------SYSTEM STABLE!!
 					if (!System_Stable)
 					{
 						System_Stable = true; // TODO SEMAPHORE
 						xTimerStart(unstable_timer,0);
 					}
-
-					/*bool check_shedding = false;
-
-					for (i =0;i<NUM_LOADS;i++){
-						xSemaphoreTake(sys_status_flag, portMAX_DELAY);
-						if (LoadStates[i] == 2){
-							check_shedding = true;
-						}
-						xSemaphoreGive(sys_status_flag);
-
-					}
-					if (!check_shedding){
-						loadshedding = false;
-						xTimerStop(unstable_timer,0);
-					}*/
-
 				}
-
-
 	    	}
-
 	    }
-	    vTaskDelay(100);
+	    vTaskDelay(SHORT_DELAY);
 	}
 }
 
 void LoadDisconnect(){
 	int i;
-//	printf("****LoadDIsconnect running****\n");
+	xSemaphoreTake(sys_status_flag, portMAX_DELAY);
 	for(i=0; i<NUM_LOADS; i++ )
 	{
 		if(LoadStates[i] == 1)
 		{
-			xSemaphoreTake(sys_status_flag, portMAX_DELAY);
-//			printf("Disconnected load %d",i);
 			LoadStates[i] = 2;
 			xSemaphoreGive(sys_status_flag);
 			return;
 		}
+		xSemaphoreGive(sys_status_flag);
 
 	}
 }
 
 void LoadReconnect(const char *ReconnectType){
 	int i;
-//	printf("begin reconnect *******************");
+	xSemaphoreTake(sys_status_flag, portMAX_DELAY);
 	for(i=(NUM_LOADS-1); i>=0; i--)
 	{
-//		printf("load[%d] = %d\n",i,LoadStates[i]);
 		if(LoadStates[i] == 2)
 		{
-			xSemaphoreTake(sys_status_flag, portMAX_DELAY);
-//			printf("Disconnected load %d",i);
 			LoadStates[i] = 1;
-			xSemaphoreGive(sys_status_flag);
 			// if arg was single reconnect, stop after one has been enabled
 			if (!strcmp(ReconnectType,"Single")){
+				xSemaphoreGive(sys_status_flag);
 				return;
 			}
 		}
 
 	}
+	xSemaphoreGive(sys_status_flag);
 	// if arg was single reconnect, all loads are connected
 	if (!strcmp(ReconnectType, "Single"))
 		loadshedding = false; // TODO semaphore;
@@ -513,22 +488,20 @@ void LoadControlTask(void *pvParameters)
 {
 	unsigned int change;
 	int i = 0;
-	long time = 0;
+	double time = 0;
 	while (1)
 	{
-		//printf("loadctrl\n");
 		if (xQueueReceive(LoadQueue, &change, portMAX_DELAY)==pdTRUE){
 			GREEN_LED = 0;
 			RED_LED = 0;
 
-			// handle disabl
+			// ensure management mode turns off all loads with flag
 			if (disable_shed){
 				LoadReconnect("All");
 				disable_shed = false;
 			}
 
 			for (i = 0;i<NUM_LOADS;i++){
-	//			printf("loadstates[%d] = %d",i,LoadStates[i]);
 				switch(LoadStates[i]){
 				case(1):
 					RED_LED += (1 << i);
@@ -543,49 +516,32 @@ void LoadControlTask(void *pvParameters)
 			}
 		}
 
-		if (GREEN_LED == 0)
+		if (GREEN_LED == 0){
 			loadshedding = false;
+		}
 
-//		printf("red leds = %d, green leds = %d\n",RED_LED,GREEN_LED);
 		IOWR_ALTERA_AVALON_PIO_DATA(RED_LEDS_BASE, RED_LED);
 		IOWR_ALTERA_AVALON_PIO_DATA(GREEN_LEDS_BASE, GREEN_LED);
 
 		// evaluate timing constraints
 		if (first_shed){
-			time = (long)(alt_timestamp())/ALT_CLK_TO_MS;
-			printf("time between unstable and load shed = %ldms\n",time);
-			SaveMeasurement(time);
 			first_shed = false;
+			time = (double)(alt_timestamp())/ALT_CLK_TO_MS;
+			printf("time between unstable and load shed = %fms\n",time);
+			SaveMeasurement(time);
+
+			// Start 500ms timer
+			xTimerStart(unstable_timer, 0);
 		}
-
-
-		vTaskDelay(10);
+		vTaskDelay(SHORT_DELAY);
 	}
 }
 
-void DebugTask(void *pvParameters)
-{
-//	FILE* fp;
-//	fp = fopen(CHARACTER_LCD_NAME, "w"); //open the character LCD as a file stream for write
-
-	while (1)
-	{
-		vTaskDelay(3000);
-
-//		fprintf(fp, "%c%sHello\n", 0x1b, "[2J"); //esc character (0x1b) followed by "[2J]" clears the screen
-//		usleep(1000000);
-//		fprintf(fp, "World!\n");
-//		usleep(1000000);
-//		fprintf(fp, "%c%sFrom NIOS II\n", 0x1b, "[2J");
-//		usleep(1000000);
-	}
-}
-
+// helper function to save timer measurements for display on vga
 void SaveMeasurement(long newMeasure) {
 	int i;
 	static bool init = false;
-
-	printf("passed %ld\n", newMeasure);
+	average_reaction = 0;
 
 	for (i = 4; i > 0; i--) {
 		reaction_measures[i] = reaction_measures[i-1];
@@ -593,7 +549,7 @@ void SaveMeasurement(long newMeasure) {
 	}
 	reaction_measures[0] = newMeasure;
 	average_reaction += reaction_measures[0];
-	average_reaction = average_reaction / 5;
+	average_reaction = average_reaction / NUM_LOADS;
 
 	if (init) {
 		if (newMeasure > max_reaction)
@@ -608,18 +564,19 @@ void SaveMeasurement(long newMeasure) {
 		init = true;
 	}
 
-	printf("------------------SAVEMEASUREMENT VALUES--------------\n");
-	for (i = 4; i >= 0; i--) {
-		printf("measure[%d] = %ldms\n", i, reaction_measures[i]);
-	}
-	printf("max reaction = %ld, min reaction = %ld average = %f\n", max_reaction, min_reaction, average_reaction);
-	printf("------------------END SAVEMEASUREMENT VALUES--------------\n");
+	//printf("------------------SAVEMEASUREMENT VALUES--------------\n");
+	//for (i = 4; i >= 0; i--) {
+	//	printf("measure[%d] = %ldms\n", i, reaction_measures[i]);
+	//}
+	//printf("max reaction = %ld, min reaction = %ld average = %f\n", max_reaction, min_reaction, average_reaction);
+	//printf("------------------END SAVEMEASUREMENT VALUES--------------\n");
 
 }
 
-// 500MS TIMER FUNC
+// 500ms timer to evaluate stability, load reconnecting/disconnecting is a function of system state
 void vTimerCallback(TimerHandle_t timer){
 	unsigned int *change = 0;
+
 	// toggle another load
 	if (!managementState){
 		if (!System_Stable){
@@ -630,18 +587,14 @@ void vTimerCallback(TimerHandle_t timer){
 		}
 		xQueueSend(LoadQueue,(void*)&change, 0);
 	}
-
-
-	// does timer need to be restarted
+	// timer will auto restart until stopped by StabilityMonitorTask when necessary
 }
 
 int main(int argc, char* argv[], char* envp[])
 {
-
 	initOSDataStructs();
 	initCreateTasks();
 	initDevices();
-	printf("started!!");
 	vTaskStartScheduler();
 	for (;;);
 	return 0;
@@ -650,6 +603,7 @@ int main(int argc, char* argv[], char* envp[])
 void initDevices(){
 	alt_up_ps2_dev * ps2_device = alt_up_ps2_open_dev(PS2_NAME);
 	alt_up_ps2_clear_fifo (ps2_device) ;
+	alt_up_ps2_enable_read_interrupt(ps2_device);
 	alt_irq_register(PS2_IRQ, ps2_device, KeyboardISR);
 	// register the PS/2 interrupt
 	IOWR_8DIRECT(PS2_BASE,4,1);
@@ -672,7 +626,6 @@ void initDevices(){
 
 }
 
-
 // This function simply creates a message queue and a semaphore
 int initOSDataStructs(void)
 {
@@ -687,17 +640,12 @@ int initOSDataStructs(void)
 	alt_irq_register(FREQUENCY_ANALYSER_IRQ, 0, NewFreqISR);
 
 	// TIMER
-
 	unstable_timer = xTimerCreate("Timer", (pdMS_TO_TICKS(1000)),pdTRUE,(void *)0,vTimerCallback);
-	//reaction_timer = xTimerCreate("Timer1",(pdMS_TO_TICKS(200)),pdFALSE,(void *)0,vTimerTooLong);
-
 	xTimerStart(unstable_timer,0);
-	//xTimerStart(reaction_timer,0);
 
 	// SEMAPHORE
 	sys_status_flag = xSemaphoreCreateMutex();
 
-	//shared_resource_sem = xSemaphoreCreateCounting( 9999, 1 );
 	return 0;
 }
 
@@ -708,6 +656,5 @@ int initCreateTasks(void)
 	xTaskCreate(StabilityMonitorTask, "StabilityMonitorTask", TASK_STACKSIZE, NULL, STABILITY_PRIORITY, NULL);
 	xTaskCreate(LoadControlTask, "LoadControlTask", TASK_STACKSIZE, NULL, LOAD_PRIORITY, NULL);
 	xTaskCreate(SwitchPollingTask, "SwitchPollingTask", TASK_STACKSIZE, NULL, SWITCH_PRIORITY, NULL);
-	//xTaskCreate(DebugTask, "DebugTask", TASK_STACKSIZE, NULL, DEBUG_PRIORITY, NULL);
 	return 0;
 }
