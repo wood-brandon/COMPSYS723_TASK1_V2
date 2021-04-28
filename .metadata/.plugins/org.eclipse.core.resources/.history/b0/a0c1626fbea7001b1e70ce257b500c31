@@ -329,7 +329,7 @@ void drawReactionTime(float average, long min, long max, long measures){
 	// print past 5 timing measurements
 	alt_up_char_buffer_string(char_buf, "TIMING MEASUREMENTS (MS)", 4, 305);
 	for(i = 0; i < 5; i++){
-		temp = (float)measures[i];
+		temp = (float)measures[i]
 		sprintf(measureBuffer, "%d:  %f", i+1, temp/1000);
 		alt_up_char_buffer_string(char_buf, measureBuffer, 4, 310+i*2);
 	}

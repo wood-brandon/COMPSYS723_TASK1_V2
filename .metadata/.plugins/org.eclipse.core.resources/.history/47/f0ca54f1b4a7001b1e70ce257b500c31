@@ -88,7 +88,6 @@ long reaction_measures[5] = { 0 };
 long max_reaction = 0;
 long min_reaction = 0;
 float average_reaction = 0;
-char measureBuffer[50];
 
 float ROCThreshold = ROC_DEFAULT;
 float freqValues[FREQ_ARRAY_SIZE] = {0};
@@ -218,7 +217,7 @@ void VGATask(void *pvParameters)
 {
 	float vga_Freq[FREQ_ARRAY_SIZE];
 	float vga_ROCFreq[FREQ_ARRAY_SIZE];
-	long vga_measures[5];
+	float vga_measures[5];
 	int startpos;
 
 	while (1)
@@ -232,16 +231,13 @@ void VGATask(void *pvParameters)
 			vga_ROCFreq[i] = freqROCValues[i];
 		}
 		for(i = 0; i<5; i++){
-			vga_measures[i] = reaction_measures[i];
+			vga_measures[i] = freq_measures[i];
 		}
 		taskEXIT_CRITICAL();
 
 
 		drawBackground();
 		drawGraphs(vga_Freq, vga_ROCFreq, startpos);
-		drawReactionTime(average_reaction, min_reaction, max_reaction, vga_measures);
-//		drawThreasholds();
-//		drawUpTime();
 
 		vTaskDelay(10);
 
@@ -318,28 +314,9 @@ void drawBackground(){
 
 }
 
-void drawReactionTime(float average, long min, long max, long measures){
+void drawReactionTime(){
 
-	int i;
-	float minimum = (float)min/1000;
-	float maximum = (float)max/1000;
-	float avg = (float)average/1000;
-	float temp;
-
-	// print past 5 timing measurements
-	alt_up_char_buffer_string(char_buf, "TIMING MEASUREMENTS (MS)", 4, 305);
-	for(i = 0; i < 5; i++){
-		temp = (float)measures[i];
-		sprintf(measureBuffer, "%d:  %f", i+1, temp/1000);
-		alt_up_char_buffer_string(char_buf, measureBuffer, 4, 310+i*2);
-	}
-
-	sprintf(measureBuffer, "Average: %f", avg);
-	alt_up_char_buffer_string(char_buf, measureBuffer, 4, 320+10);
-	sprintf(measureBuffer, "Minimum: %f", minimum);
-	alt_up_char_buffer_string(char_buf, measureBuffer, 4, 320+12);
-	sprintf(measureBuffer, "Maximum: %f", maximum);
-	alt_up_char_buffer_string(char_buf, measureBuffer, 4, 320+14);
+	alt_up_char_buffer_string(char_buf, )
 
 }
 
