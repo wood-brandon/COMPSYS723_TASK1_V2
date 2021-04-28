@@ -240,7 +240,7 @@ void VGATask(void *pvParameters)
 		drawBackground();
 		drawGraphs(vga_Freq, vga_ROCFreq, startpos);
 		drawReactionTime(average_reaction, min_reaction, max_reaction, vga_measures);
-		drawThreasholds(freqThreshold, ROCThreshold);
+//		drawThreasholds();
 		drawUpTime(xTaskGetTikCount()/1000);
 
 		vTaskDelay(10);
@@ -343,10 +343,7 @@ void drawReactionTime(float average, long min, long max, long measures){
 
 }
 
-void drawThresholds(float freq, float roc){
-
-	sprintf(measureBuffer, "Frequency Threshold:  %f    ROC Threshold:  %f", freq, roc);
-	alt_up_char_buffer_string(char_buf, measureBuffer, 100, 57+10);
+void drawThresholds(){
 
 }
 
@@ -361,15 +358,10 @@ void drawUptime(int seconds){
 
 
 
-	days = seconds/daysConversion;
-	seconds = seconds - (days*daysConversion);
-	hours = seconds/hoursConversion;
-	seconds = seconds - (hours*hoursConversion);
-	minutes = seconds/minutesConversion;
-	seconds = seconds-(minutes*minutesConversion);
+	days = seconds/(60*60*24);
+	seconds = seconds - (days*(60*60*24));
 
-	sprintf(measureBuffer, "System Uptime: %d:%d:%d:%d", days, hours, minutes, seconds);
-	alt_up_char_buffer_string(char_buf, measureBuffer, 50, 57+10);
+	alt_up_char_buffer_string(char_buf, measureBuffer, 50, 57+10)
 
 }
 

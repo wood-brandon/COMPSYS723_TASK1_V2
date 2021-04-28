@@ -345,8 +345,6 @@ void drawReactionTime(float average, long min, long max, long measures){
 
 void drawThresholds(float freq, float roc){
 
-	sprintf(measureBuffer, "Frequency Threshold:  %f    ROC Threshold:  %f", freq, roc);
-	alt_up_char_buffer_string(char_buf, measureBuffer, 100, 57+10);
 
 }
 
