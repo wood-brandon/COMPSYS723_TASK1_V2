@@ -14,7 +14,6 @@
 #include "freertos/timers.h"
 #include "io.h"
 #include "alt_types.h"
-#include "sys/alt_irq.h"
 #include "sys/alt_timestamp.h"
 #include "sys/alt_irq.h"
 
@@ -53,9 +52,9 @@
 #define MIN_FREQ 45.0 //minimum frequency to draw
 
 // Definition of Task Priorities
-#define VGA_PRIORITY 			1
-#define STABILITY_PRIORITY      6
-#define LOAD_PRIORITY      		4
+#define VGA_PRIORITY 			2
+#define STABILITY_PRIORITY      4
+#define LOAD_PRIORITY      		3
 #define SWITCH_PRIORITY    		1
 
 #define SWITCH_DELAY 100
@@ -81,6 +80,7 @@ TimerHandle_t reaction_timer;
 // Semaphore
 xSemaphoreHandle sys_status_flag;
 xSemaphoreHandle management_flag;
+xSemaphoreHandle LoadQ_sem;
 SemaphoreHandle_t shared_resource_sem;
 
 //-------------------------------------GLOBAL VARIABLES
@@ -98,6 +98,7 @@ long min_reaction = 0;
 float average_reaction = 0;
 char measureBuffer[50];
 char Threshold_Input_Buffer[3];
+double old_time = 0;
 
 float ROCThreshold = ROC_DEFAULT;
 float freqValues[FREQ_ARRAY_SIZE] = {0};
@@ -131,6 +132,8 @@ void drawUptime(int);
 void NewFreqISR(){
 
     #define SAMPLING_FREQUENCY 16000.0
+	if (!first_shed)
+		alt_timestamp_start();
 	double freq = SAMPLING_FREQUENCY/(double)IORD(FREQUENCY_ANALYSER_BASE, 0);
 	xQueueSendToBackFromISR(frequencyQ, &freq, pdFALSE);
 	return;
@@ -139,12 +142,14 @@ void NewFreqISR(){
 void PushButtonISR(){
 	managementState = !managementState;
 	if (managementState){
+
 		disable_shed = true;
 		loadshedding = false;
 		xTimerStopFromISR(unstable_timer,0);
 	}
 	IOWR_ALTERA_AVALON_PIO_EDGE_CAP(PUSH_BUTTON_BASE, 0x7);
-	xQueueSendFromISR(LoadQueue,0, 0);
+	//xQueueSendFromISR(LoadQueue,0, 0);
+	xSemaphoreGiveFromISR(LoadQ_sem,8);
 }
 
 // TODO ROC threshold semaphore
@@ -219,8 +224,9 @@ void SwitchPollingTask(void *pvParameters)
 		}
 
 		xSemaphoreGive(sys_status_flag);
+		xSemaphoreGive(LoadQ_sem);
 
-		xQueueSend(LoadQueue,(void*)&change, 0);
+		//xQueueSend(LoadQueue,(void*)&change, 0);
 		vTaskDelay(SWITCH_DELAY);
 	}
 
@@ -340,7 +346,7 @@ void drawReactionTime(float average, long min, long max, long *measures){
 	float temp;
 
 	// print past 5 timing measurements
-	alt_up_char_buffer_string(char_buf, "TIMING MEASUREMENTS (S)", 4, 40);
+	alt_up_char_buffer_string(char_buf, "TIMING MEASUREMENTS (MS)", 4, 40);
 	for(i = 0; i < 5; i++){
 		temp = (float)measures[i];
 		sprintf(measureBuffer, "%d:  %f", i+1, temp/1000);
@@ -357,7 +363,6 @@ void drawReactionTime(float average, long min, long max, long *measures){
 }
 
 void drawThresholds(float freq, float roc){
-
 	sprintf(measureBuffer, "Frequency Threshold:  %.2f Hz", freq);
 	alt_up_char_buffer_string(char_buf, measureBuffer, 44, 40);
 	sprintf(measureBuffer, "ROC Threshold:  %.2f Hz/s", roc);
@@ -423,17 +428,22 @@ void StabilityMonitorTask(void *pvParameters)
 						xTimerStart(unstable_timer,0);
 					}
 
-					if(!loadshedding)
+					if(!loadshedding && RED_LED != 0)
 					{
 						// time initial load shedding
-						alt_timestamp_start();
+
+
+						//old_time = (double)(alt_timestamp());
 						loadshedding = true;
 						first_shed = true;
 
 						//shed first low priority load
 						LoadDisconnect();
-						xQueueSend(LoadQueue,(void*)&change, 0);
-						xTimerStart(unstable_timer, 0);
+						//xQueueSend(LoadQueue,(void*)&change, 0);
+						xSemaphoreGive(LoadQ_sem);
+
+						//printf("first_shed %d, loadshedding %d, \n",uxQueueMessagesWaiting(LoadQueue));
+						//xTimerStart(unstable_timer, 0);
 					}
 				}else{
 					//-------------------------------------------------------------------------------SYSTEM STABLE!!
@@ -444,7 +454,7 @@ void StabilityMonitorTask(void *pvParameters)
 				}
 	    	}
 	    }
-	    vTaskDelay(100);
+	    vTaskDelay(SHORT_DELAY);
 	}
 }
 
@@ -459,9 +469,9 @@ void LoadDisconnect(){
 			xSemaphoreGive(sys_status_flag);
 			return;
 		}
-		xSemaphoreGive(sys_status_flag);
-
 	}
+	xSemaphoreGive(sys_status_flag);
+	return;
 }
 
 void LoadReconnect(const char *ReconnectType){
@@ -495,13 +505,21 @@ void LoadControlTask(void *pvParameters)
 {
 	unsigned int change;
 	int i = 0;
-	double time = 0;
+	long time = 0;
 	while (1)
 	{
-		if (xQueueReceive(LoadQueue, &change, portMAX_DELAY)==pdTRUE){
+		if (first_shed){
+			printf("LOAD CTRL TASK: BEFORE QUEUE %d\n",alt_timestamp());
+		}
+
+		//if (xQueueReceive(LoadQueue, &change, portMAX_DELAY)==pdTRUE){
+		if (xSemaphoreTake(LoadQ_sem, 200)){
 			GREEN_LED = 0;
 			RED_LED = 0;
-
+			if (first_shed){
+				printf("LOAD CTRL TASK: AFTER QUEUE\n");
+				//printf("sys_stable = %d, loadshedding = %d, first_shed = %d, disable_shed = %d, managementstate = %d\n",System_Stable,loadshedding,first_shed,disable_shed,managementState);
+			}
 			// ensure management mode turns off all loads with flag
 			if (disable_shed){
 				LoadReconnect("All");
@@ -525,6 +543,7 @@ void LoadControlTask(void *pvParameters)
 
 		if (GREEN_LED == 0){
 			loadshedding = false;
+			first_shed = false;
 			xTimerStop(unstable_timer, 0);
 		}
 
@@ -534,12 +553,13 @@ void LoadControlTask(void *pvParameters)
 		// evaluate timing constraints
 		if (first_shed){
 			first_shed = false;
-			time = (double)(alt_timestamp())/ALT_CLK_TO_MS;
+			time = (long)(alt_timestamp());
 			//printf("time between unstable and load shed = %fms\n",time);
+			//printf("old %f new %f diff %f\n",old_time,time,time-old_time);
 			SaveMeasurement(time);
 
 			// Start 500ms timer
-			xTimerStart(unstable_timer, 0);
+			//xTimerStart(unstable_timer, 0);
 		}
 		vTaskDelay(SHORT_DELAY);
 	}
@@ -649,9 +669,10 @@ int initOSDataStructs(void)
 
 	// TIMER
 	unstable_timer = xTimerCreate("Timer", (pdMS_TO_TICKS(STABILITY_DELAY_MS)),pdTRUE,(void *)0,vTimerCallback);
-
+	//alt_timestamp_start();
 	// SEMAPHORE
 	sys_status_flag = xSemaphoreCreateMutex();
+	vSemaphoreCreateBinary(LoadQ_sem);
 
 	return 0;
 }
