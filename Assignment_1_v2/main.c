@@ -170,7 +170,7 @@ void KeyboardISR(void* context, alt_u32 id)
 				freqThreshold += FREQ_STEP;
 				break;
 			case PS2_KEY_LEFT:
-				if (freqThreshold > 0)
+				if (freqThreshold > 0.01)
 					freqThreshold -= FREQ_STEP;
 				break;
 			case PS2_KEY_ESC:
@@ -242,7 +242,6 @@ void VGATask(void* pvParameters)
 			vga_measures[i] = reaction_measures[i];
 		}
 		taskEXIT_CRITICAL();
-
 
 		drawBackground();
 		drawGraphs(vga_Freq, vga_ROCFreq, startpos);
@@ -348,9 +347,9 @@ void drawReactionTime(float average, long min, long max, long* measures) {
 }
 
 void drawThresholds(float freq, float roc) {
-	sprintf(measureBuffer, "Frequency Threshold:  %.2f Hz", freq);
+	sprintf(measureBuffer, "Frequency Threshold:  %05.2f Hz", freq);
 	alt_up_char_buffer_string(char_buf, measureBuffer, 44, 40);
-	sprintf(measureBuffer, "ROC Threshold:  %.2f Hz/s", roc);
+	sprintf(measureBuffer, "ROC Threshold:  %05.2f Hz/s", roc);
 	alt_up_char_buffer_string(char_buf, measureBuffer, 44, 42);
 }
 
